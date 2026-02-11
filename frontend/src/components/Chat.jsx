@@ -75,11 +75,26 @@ const Chat = ({ user }) => {
         });
     }, [fetchMessages]);
 
+    // Detect if running on mobile or as standalone PWA (not regular PC browser)
+    const isMobileOrPWA = () => {
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+            || window.navigator.standalone === true;
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        return isMobile || isStandalone;
+    };
+
     // Check push notification status on load
     useEffect(() => {
         const initPush = async () => {
             // Register SW first (no permission needed)
             await registerServiceWorker();
+
+            // On PC browsers (not standalone PWA), skip push notification banner
+            // PC browsers receive messages via WebSocket in real-time
+            if (!isMobileOrPWA()) {
+                setPushStatus('unsupported');
+                return;
+            }
 
             if (!isPushSupported()) {
                 setPushStatus('unsupported');
@@ -264,13 +279,6 @@ const Chat = ({ user }) => {
 
     return (
         <div className="chat-container">
-            <header className="chat-header">
-                <h1>Chat Room</h1>
-                <div className="user-info">
-                    <img src={user.avatar_url} alt={user.name} className="avatar-small" />
-                    <span>{user.name}</span>
-                </div>
-            </header>
 
             {renderPushBanner()}
 
