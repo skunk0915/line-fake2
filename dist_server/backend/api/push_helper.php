@@ -26,9 +26,23 @@ function sendPushNotifications($message, $senderId)
     try {
         $pdo = getDbConnection();
 
-        // Get all subscriptions except sender
-        $stmt = $pdo->prepare("SELECT * FROM push_subscriptions WHERE user_id != ?");
-        $stmt->execute([$senderId]);
+        // Determine who to notify
+        $recipientId = (int)($message['recipient_id'] ?? 0);
+        $senderIdInt = (int)$senderId;
+
+        if ($recipientId === 0) {
+            // Global chat: notify everyone except sender
+            $stmt = $pdo->prepare("SELECT * FROM push_subscriptions WHERE user_id != ?");
+            $stmt->execute([$senderIdInt]);
+        } else {
+            // 1-on-1 chat: notify only the recipient
+            // If sender is talking to themselves, no notification needed
+            if ($recipientId === $senderIdInt) {
+                return ['sent' => 0, 'message' => 'Sender is recipient'];
+            }
+            $stmt = $pdo->prepare("SELECT * FROM push_subscriptions WHERE user_id = ?");
+            $stmt->execute([$recipientId]);
+        }
         $subscriptions = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         if (empty($subscriptions)) {
