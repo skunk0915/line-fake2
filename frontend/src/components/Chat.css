@@ -3,44 +3,48 @@
     display: flex;
     flex-direction: column;
     height: 100vh;
-    background-color: #f0f2f5;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
-}
-
-.chat-header {
-    background-color: #2c3e50;
-    color: white;
-    padding: 10px 20px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    background-color: #8babd8;
+    /* LINE classic blue-ish background */
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", Hiragino Kaku Gothic ProN, Hiragino Sans, Meiryo, sans-serif;
 }
 
 .messages-list {
     flex: 1;
     overflow-y: auto;
-    padding: 20px;
+    padding: 10px 15px;
     display: flex;
     flex-direction: column;
 }
 
+.date-header {
+    display: flex;
+    justify-content: center;
+    margin: 15px 0;
+}
+
+.date-header span {
+    background-color: rgba(0, 0, 0, 0.15);
+    color: white;
+    padding: 2px 12px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+}
+
 .message-row {
     display: flex;
-    margin-bottom: 10px;
-    opacity: 0;
-    animation: fadeIn 0.3s forwards;
+    margin-bottom: 12px;
+    animation: fadeIn 0.2s ease-out forwards;
 }
 
 @keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+
     to {
         opacity: 1;
         transform: translateY(0);
-    }
-
-    from {
-        opacity: 0;
-        transform: translateY(10px);
     }
 }
 
@@ -53,97 +57,142 @@
 }
 
 .message-content {
-    max-width: 70%;
+    max-width: 85%;
     display: flex;
     flex-direction: column;
 }
 
-.my-message .message-content {
+.message-bubble-row {
+    display: flex;
     align-items: flex-end;
+    gap: 5px;
 }
 
-.other-message .message-content {
-    align-items: flex-start;
+.my-message .message-bubble-row {
+    flex-direction: row;
 }
 
-.message-text {
-    padding: 10px 15px;
+.other-message .message-bubble-row {
+    flex-direction: row-reverse;
+}
+
+.bubble {
+    padding: 8px 12px;
     border-radius: 18px;
-    margin: 2px 0;
     font-size: 0.95rem;
     line-height: 1.4;
     word-wrap: break-word;
+    position: relative;
+    max-width: fit-content;
 }
 
-.my-message .message-text {
-    background-color: #0084ff;
-    color: white;
-    border-bottom-right-radius: 4px;
+.my-message .bubble {
+    background-color: #7cfc00;
+    /* LINE Green */
+    color: #000;
 }
 
-.other-message .message-text {
-    background-color: #e4e6eb;
+.other-message .bubble {
+    background-color: white;
     color: black;
-    border-bottom-left-radius: 4px;
 }
 
-.avatar-msg {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    margin-right: 8px;
-    align-self: flex-end;
-}
-
-.timestamp {
-    font-size: 0.7rem;
-    color: #888;
-    margin-top: 2px;
-}
-
-.input-area {
+/* User Selector */
+.user-selector {
+    display: flex;
+    overflow-x: auto;
     padding: 10px;
-    background: white;
+    background-color: rgba(255, 255, 255, 0.9);
+    border-bottom: 1px solid #ddd;
+    gap: 15px;
+    scrollbar-width: none;
+    /* Firefox */
+}
+
+.user-selector::-webkit-scrollbar {
+    display: none;
+    /* Safari/Chrome */
+}
+
+.user-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 50px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.user-item:active {
+    opacity: 0.6;
+}
+
+.user-avatar {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    background-color: #eee;
+    object-fit: cover;
+    margin-bottom: 4px;
+    border: 2px solid transparent;
+}
+
+.user-item.active .user-avatar {
+    border-color: #06c755;
+}
+
+.global-icon {
     display: flex;
     align-items: center;
-    border-top: 1px solid #ddd;
+    justify-content: center;
+    font-size: 1.5rem;
+    background-color: #ddd;
 }
 
-.input-area input[type="text"] {
-    flex: 1;
-    padding: 10px;
-    border: 1px solid #ddd;
-    border-radius: 20px;
-    margin: 0 10px;
-    outline: none;
+.user-name-label {
+    font-size: 0.65rem;
+    color: #333;
+    max-width: 55px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.input-area button {
-    padding: 8px 16px;
-    background-color: #0084ff;
-    color: white;
-    border: none;
-    border-radius: 20px;
-    cursor: pointer;
+.user-item.active .user-name-label {
+    color: #06c755;
     font-weight: bold;
 }
 
-.image-upload-btn {
-    font-size: 1.5rem;
-    cursor: pointer;
-    margin-right: 5px;
+.message-text {
+    margin: 0;
 }
 
-.image-preview {
-    font-size: 0.8rem;
-    color: green;
-    margin-right: 5px;
+.avatar-msg {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    margin-right: 8px;
+    background-color: #ddd;
+}
+
+.timestamp {
+    font-size: 0.65rem;
+    color: #444;
+    white-space: nowrap;
+    margin-bottom: 2px;
+}
+
+.my-message .timestamp {
+    margin-left: auto;
 }
 
 .message-image {
-    max-width: 200px;
+    max-width: 100%;
+    max-height: 300px;
     border-radius: 10px;
-    margin: 5px 0;
+    display: block;
+    margin-bottom: 4px;
+    object-fit: contain;
 }
 
 /* Push Notification Banner */
@@ -186,10 +235,57 @@
     transform: scale(0.95);
 }
 
+/* Input Area */
+.input-area {
+    padding: 10px 15px;
+    background: #f8f8f8;
+    display: flex;
+    align-items: center;
+    border-top: 1px solid #ddd;
+    gap: 10px;
+}
+
+.input-area input[type="text"] {
+    flex: 1;
+    padding: 8px 15px;
+    border: 1px solid #ddd;
+    border-radius: 20px;
+    outline: none;
+    font-size: 0.95rem;
+}
+
+.input-area button {
+    padding: 8px 15px;
+    background-color: #06c755;
+    color: white;
+    border: none;
+    border-radius: 20px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background 0.2s;
+}
+
+.input-area button:disabled {
+    background-color: #ccc;
+    cursor: default;
+}
+
+.image-upload-btn {
+    font-size: 1.4rem;
+    cursor: pointer;
+}
+
+.image-preview {
+    font-size: 0.75rem;
+    color: #06c755;
+    font-weight: bold;
+}
+
 .sender-name {
     font-size: 0.75rem;
-    color: #666;
-    margin-bottom: 2px;
+    color: #555;
+    margin-bottom: 3px;
+    margin-left: 2px;
 }
 
 .avatar-small {

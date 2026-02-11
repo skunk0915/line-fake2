@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS messages (
     id INT AUTO_INCREMENT PRIMARY KEY,
     sender_id INT NOT NULL,
+    recipient_id INT DEFAULT 0, -- 0 can mean global or system
     type ENUM('text', 'image') DEFAULT 'text',
     content TEXT,
     image_url TEXT,
