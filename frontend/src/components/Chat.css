@@ -3,7 +3,13 @@
     display: flex;
     flex-direction: column;
     height: 100vh;
+    height: 100svh;
+    /* For mobile browsers with dynamic UI */
     background-color: #8babd8;
+    max-width: 1000px;
+    width: 100%;
+    margin: 0 auto;
+    position: relative;
     /* LINE classic blue-ish background */
     font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", Hiragino Kaku Gothic ProN, Hiragino Sans, Meiryo, sans-serif;
 }
@@ -106,7 +112,9 @@
     border-bottom: 1px solid #ddd;
     gap: 15px;
     scrollbar-width: none;
-    /* Firefox */
+    position: sticky;
+    top: 0;
+    z-index: 10;
 }
 
 .user-selector::-webkit-scrollbar {
@@ -243,6 +251,9 @@
     align-items: center;
     border-top: 1px solid #ddd;
     gap: 10px;
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
 }
 
 .input-area input[type="text"] {
@@ -275,10 +286,78 @@
     cursor: pointer;
 }
 
-.image-preview {
-    font-size: 0.75rem;
-    color: #06c755;
-    font-weight: bold;
+.image-preview-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.image-preview-thumb {
+    width: 60px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid #ddd;
+}
+
+.image-preview-overlay {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    display: flex;
+    gap: 4px;
+}
+
+.preview-btn {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    cursor: pointer;
+    background: rgba(0, 0, 0, 0.6);
+    color: white;
+    padding: 0;
+}
+
+.preview-btn.remove-btn {
+    background: #ff4d4f;
+}
+
+.preview-btn.folder-btn {
+    background: #06c755;
+}
+
+.image-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.image-modal img {
+    max-width: 95%;
+    max-height: 90%;
+    object-fit: contain;
+}
+
+.close-modal {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    color: white;
+    font-size: 2rem;
+    cursor: pointer;
 }
 
 .sender-name {

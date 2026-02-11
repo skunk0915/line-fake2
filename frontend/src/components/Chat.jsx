@@ -19,6 +19,8 @@ const Chat = ({ user }) => {
     const [users, setUsers] = useState([]);
     const [input, setInput] = useState('');
     const [image, setImage] = useState(null);
+    const [imagePreview, setImagePreview] = useState(null);
+    const [showModal, setShowModal] = useState(false);
     const [pushStatus, setPushStatus] = useState('loading');
     const [recipientId, setRecipientId] = useState(0); // 0 = Global chat
     const socketRef = useRef();
@@ -232,6 +234,7 @@ const Chat = ({ user }) => {
             });
             setInput('');
             setImage(null);
+            setImagePreview(null);
             fetchMessages(); // Refresh after send
         } catch (err) {
             console.error('Send error:', err);
@@ -240,8 +243,19 @@ const Chat = ({ user }) => {
 
     const handleFileChange = (e) => {
         if (e.target.files && e.target.files[0]) {
-            setImage(e.target.files[0]);
+            const file = e.target.files[0];
+            setImage(file);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setImagePreview(reader.result);
+            };
+            reader.readAsDataURL(file);
         }
+    };
+
+    const handleRemoveImage = () => {
+        setImage(null);
+        setImagePreview(null);
     };
 
     const parseDate = (dateStr) => {
@@ -369,7 +383,22 @@ const Chat = ({ user }) => {
                     style={{ display: 'none' }}
                     onChange={handleFileChange}
                 />
-                {image && <span className="image-preview">画像選択中</span>}
+
+                {imagePreview && (
+                    <div className="image-preview-wrapper">
+                        <img
+                            src={imagePreview}
+                            className="image-preview-thumb"
+                            alt="preview"
+                            onClick={() => setShowModal(true)}
+                        />
+                        <div className="image-preview-overlay">
+                            <button type="button" className="preview-btn remove-btn" onClick={handleRemoveImage}>✕</button>
+                            <label htmlFor="file-upload" className="preview-btn folder-btn">📁</label>
+                        </div>
+                    </div>
+                )}
+
                 <input
                     type="text"
                     value={input}
@@ -378,6 +407,13 @@ const Chat = ({ user }) => {
                 />
                 <button type="submit" disabled={!input.trim() && !image}>送信</button>
             </form>
+
+            {showModal && imagePreview && (
+                <div className="image-modal" onClick={() => setShowModal(false)}>
+                    <span className="close-modal">✕</span>
+                    <img src={imagePreview} alt="full preview" />
+                </div>
+            )}
         </div>
     );
 };
