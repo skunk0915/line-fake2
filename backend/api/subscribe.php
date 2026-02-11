@@ -22,18 +22,18 @@ $auth = $keys['auth'];
 
 $pdo = getDbConnection();
 
-// Check if subscription exists for user
-$stmt = $pdo->prepare("SELECT id FROM push_subscriptions WHERE user_id = ? AND endpoint = ?");
-$stmt->execute([$userId, $endpoint]);
+// Check if subscription exists for this endpoint
+$stmt = $pdo->prepare("SELECT id FROM push_subscriptions WHERE endpoint = ?");
+$stmt->execute([$endpoint]);
 $existing = $stmt->fetch();
 
 if (!$existing) {
     $insert = $pdo->prepare("INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (?, ?, ?, ?)");
     $insert->execute([$userId, $endpoint, $p256dh, $auth]);
 } else {
-    // Optionally update keys
-    $update = $pdo->prepare("UPDATE push_subscriptions SET p256dh = ?, auth = ? WHERE id = ?");
-    $update->execute([$p256dh, $auth, $existing['id']]);
+    // Update both user_id and keys for existing endpoint
+    $update = $pdo->prepare("UPDATE push_subscriptions SET user_id = ?, p256dh = ?, auth = ? WHERE id = ?");
+    $update->execute([$userId, $p256dh, $auth, $existing['id']]);
 }
 
 jsonResponse(['success' => true]);

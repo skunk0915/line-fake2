@@ -1,6 +1,6 @@
 {
-    "name": "Chat Room",
-    "short_name": "Chat",
+    "name": "LINE風",
+    "short_name": "LINE風",
     "id": "/line-fake2/",
     "start_url": "/line-fake2/",
     "scope": "/line-fake2/",

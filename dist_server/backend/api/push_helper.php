@@ -36,7 +36,6 @@ function sendPushNotifications($message, $senderId)
             $stmt->execute([$senderIdInt]);
         } else {
             // 1-on-1 chat: notify only the recipient
-            // If sender is talking to themselves, no notification needed
             if ($recipientId === $senderIdInt) {
                 return ['sent' => 0, 'message' => 'Sender is recipient'];
             }
@@ -46,7 +45,7 @@ function sendPushNotifications($message, $senderId)
         $subscriptions = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         if (empty($subscriptions)) {
-            return ['sent' => 0, 'message' => 'No subscribers'];
+            return ['sent' => 0, 'message' => 'No subscribers found for user ' . $recipientId];
         }
 
         // Set up WebPush
