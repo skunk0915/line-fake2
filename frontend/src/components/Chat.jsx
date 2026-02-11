@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import axios from 'axios';
 import { registerPush } from '../utils/push';
@@ -13,26 +13,67 @@ const Chat = ({ user }) => {
     const [image, setImage] = useState(null);
     const socketRef = useRef();
     const messagesEndRef = useRef(null);
+    const isFetchingRef = useRef(false);
+
+    // Fetch messages from server
+    const fetchMessages = useCallback(async () => {
+        if (isFetchingRef.current) return;
+        isFetchingRef.current = true;
+        try {
+            const res = await axios.get(`${API_URL}/messages.php`);
+            if (res.data && res.data.messages) {
+                setMessages(res.data.messages);
+            }
+        } catch (err) {
+            console.error('Fetch error:', err);
+        } finally {
+            isFetchingRef.current = false;
+        }
+    }, []);
+
+    // Connect / reconnect socket
+    const connectSocket = useCallback(() => {
+        if (socketRef.current?.connected) return;
+
+        if (socketRef.current) {
+            socketRef.current.disconnect();
+        }
+
+        socketRef.current = io(SOCKET_URL, {
+            transports: ['websocket', 'polling'],
+            reconnection: true,
+            reconnectionAttempts: Infinity,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            timeout: 20000,
+        });
+
+        socketRef.current.on('connect', () => {
+            console.log('Socket connected');
+            // Re-fetch messages on reconnect to catch anything missed
+            fetchMessages();
+        });
+
+        socketRef.current.on('chat_message', (msg) => {
+            setMessages((prev) => {
+                // Prevent duplicate messages by checking id
+                if (msg.id && prev.some(m => String(m.id) === String(msg.id))) {
+                    return prev;
+                }
+                return [...prev, msg];
+            });
+        });
+
+        socketRef.current.on('disconnect', (reason) => {
+            console.log('Socket disconnected:', reason);
+        });
+    }, [fetchMessages]);
 
     useEffect(() => {
         // 1. Connect Socket
-        socketRef.current = io(SOCKET_URL);
-
-        socketRef.current.on('chat_message', (msg) => {
-            setMessages((prev) => [...prev, msg]);
-        });
+        connectSocket();
 
         // 2. Fetch History
-        const fetchMessages = async () => {
-            try {
-                const res = await axios.get(`${API_URL}/messages.php`);
-                if (res.data && res.data.messages) {
-                    setMessages(res.data.messages);
-                }
-            } catch (err) {
-                console.error('Fetch error:', err);
-            }
-        };
         fetchMessages();
 
         // 3. Register Push
@@ -40,10 +81,55 @@ const Chat = ({ user }) => {
             registerPush(user.id);
         }
 
-        return () => {
-            socketRef.current.disconnect();
+        // 4. Handle visibility change (iOS kills WebSocket in background)
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                console.log('App became visible, refreshing...');
+                // Reconnect socket if disconnected
+                if (!socketRef.current?.connected) {
+                    connectSocket();
+                }
+                // Always re-fetch messages when coming back to foreground
+                fetchMessages();
+            }
         };
-    }, [user]);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        // 5. Handle Service Worker messages (push notification received while app is open)
+        const handleSWMessage = (event) => {
+            if (event.data && event.data.type === 'NEW_MESSAGE') {
+                fetchMessages();
+            }
+        };
+        navigator.serviceWorker?.addEventListener('message', handleSWMessage);
+
+        // 6. Handle page focus (additional fallback for iOS)
+        const handleFocus = () => {
+            if (!socketRef.current?.connected) {
+                connectSocket();
+            }
+            fetchMessages();
+        };
+        window.addEventListener('focus', handleFocus);
+
+        // 7. Periodic check as final fallback (every 30s if tab is visible)
+        const intervalId = setInterval(() => {
+            if (document.visibilityState === 'visible') {
+                if (!socketRef.current?.connected) {
+                    connectSocket();
+                }
+                fetchMessages();
+            }
+        }, 30000);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            navigator.serviceWorker?.removeEventListener('message', handleSWMessage);
+            window.removeEventListener('focus', handleFocus);
+            clearInterval(intervalId);
+            socketRef.current?.disconnect();
+        };
+    }, [user, connectSocket, fetchMessages]);
 
     useEffect(() => {
         scrollToBottom();
@@ -63,9 +149,6 @@ const Chat = ({ user }) => {
         if (image) formData.append('image', image);
 
         try {
-            // Optimistic 
-            // Actually wait for server ack via socket usually, 
-            // but here we just POST and let socket receive it back.
             await axios.post(`${API_URL}/messages.php`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
@@ -96,7 +179,7 @@ const Chat = ({ user }) => {
                 {messages.map((msg, index) => {
                     const isMe = String(msg.sender_id) === String(user.id);
                     return (
-                        <div key={index} className={`message-row ${isMe ? 'my-message' : 'other-message'}`}>
+                        <div key={msg.id || index} className={`message-row ${isMe ? 'my-message' : 'other-message'}`}>
                             {!isMe && <img src={msg.sender_avatar} className="avatar-msg" alt="" />}
                             <div className="message-content">
                                 {msg.sender_name && !isMe && <span className="sender-name">{msg.sender_name}</span>}

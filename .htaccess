@@ -1,6 +1,22 @@
 <IfModule mod_headers.c>
   # Google Sign-In Popup requirement
   Header set Cross-Origin-Opener-Policy "same-origin-allow-popups"
+
+  # Service Worker - prevent caching so updates are picked up immediately
+  <FilesMatch "sw\.js$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Service-Worker-Allowed "/"
+  </FilesMatch>
+
+  # Manifest - proper content type
+  <FilesMatch "manifest\.json$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>
+
+# Proper MIME types
+<IfModule mod_mime.c>
+  AddType application/manifest+json .json
 </IfModule>
 
 <IfModule mod_rewrite.c>
@@ -11,8 +27,13 @@
   RewriteRule ^backend/ - [L]
   RewriteRule ^api/ - [L]
 
+  # Service worker and manifest - no rewrite
+  RewriteRule ^sw\.js$ - [L]
+  RewriteRule ^manifest\.json$ - [L]
+
   # SPA Routing
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteRule . /line-fake2/index.html [L]
 </IfModule>
+

@@ -1,0 +1,25 @@
+{
+    "name": "Chat Room",
+    "short_name": "Chat",
+    "id": "/line-fake2/",
+    "start_url": "/line-fake2/",
+    "scope": "/line-fake2/",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#06c755",
+    "orientation": "portrait",
+    "icons": [
+        {
+            "src": "/line-fake2/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/line-fake2/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ]
+}
