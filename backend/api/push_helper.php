@@ -53,8 +53,8 @@ function sendPushNotifications($message, $senderId)
         $payload = json_encode([
             'title' => $senderName,
             'body' => $body,
-            'icon' => '/line-fake2/icon-192.png',
-            'badge' => '/line-fake2/icon-192.png',
+            'icon' => '/line-fake2/favicon/icon-192.png',
+            'badge' => '/line-fake2/favicon/icon-192.png',
             'data' => ['url' => '/line-fake2/']
         ]);
 

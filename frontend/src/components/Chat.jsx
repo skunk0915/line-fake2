@@ -146,14 +146,23 @@ const Chat = ({ user }) => {
                     connectSocket();
                 }
                 fetchMessages();
+                // Clear app badge when user opens the app
+                if (navigator.clearAppBadge) {
+                    navigator.clearAppBadge().catch(() => { });
+                }
             }
         };
         document.addEventListener('visibilitychange', handleVisibilityChange);
 
-        // 4. Handle Service Worker messages (push notification received while app is open)
+        // 4. Handle Service Worker messages
         const handleSWMessage = (event) => {
             if (event.data && event.data.type === 'NEW_MESSAGE') {
                 fetchMessages();
+            }
+            if (event.data && event.data.type === 'CLEAR_BADGE') {
+                if (navigator.clearAppBadge) {
+                    navigator.clearAppBadge().catch(() => { });
+                }
             }
         };
         navigator.serviceWorker?.addEventListener('message', handleSWMessage);
@@ -164,6 +173,10 @@ const Chat = ({ user }) => {
                 connectSocket();
             }
             fetchMessages();
+            // Clear badge on focus too
+            if (navigator.clearAppBadge) {
+                navigator.clearAppBadge().catch(() => { });
+            }
         };
         window.addEventListener('focus', handleFocus);
 
