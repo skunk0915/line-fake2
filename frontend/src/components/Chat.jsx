@@ -1,7 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import axios from 'axios';
-import { registerPush } from '../utils/push';
+import {
+    registerServiceWorker,
+    subscribePush,
+    silentResubscribe,
+    isPushSupported,
+    getNotificationStatus,
+    checkExistingSubscription
+} from '../utils/push';
 import './Chat.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
@@ -11,6 +18,7 @@ const Chat = ({ user }) => {
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
     const [image, setImage] = useState(null);
+    const [pushStatus, setPushStatus] = useState('loading'); // 'loading' | 'unsupported' | 'prompt' | 'subscribing' | 'subscribed' | 'denied'
     const socketRef = useRef();
     const messagesEndRef = useRef(null);
     const isFetchingRef = useRef(false);
@@ -42,21 +50,19 @@ const Chat = ({ user }) => {
         socketRef.current = io(SOCKET_URL, {
             transports: ['websocket', 'polling'],
             reconnection: true,
-            reconnectionAttempts: Infinity,
-            reconnectionDelay: 1000,
-            reconnectionDelayMax: 5000,
-            timeout: 20000,
+            reconnectionAttempts: 3,
+            reconnectionDelay: 2000,
+            reconnectionDelayMax: 10000,
+            timeout: 10000,
         });
 
         socketRef.current.on('connect', () => {
             console.log('Socket connected');
-            // Re-fetch messages on reconnect to catch anything missed
             fetchMessages();
         });
 
         socketRef.current.on('chat_message', (msg) => {
             setMessages((prev) => {
-                // Prevent duplicate messages by checking id
                 if (msg.id && prev.some(m => String(m.id) === String(msg.id))) {
                     return prev;
                 }
@@ -69,6 +75,62 @@ const Chat = ({ user }) => {
         });
     }, [fetchMessages]);
 
+    // Check push notification status on load
+    useEffect(() => {
+        const initPush = async () => {
+            // Register SW first (no permission needed)
+            await registerServiceWorker();
+
+            if (!isPushSupported()) {
+                setPushStatus('unsupported');
+                return;
+            }
+
+            const status = getNotificationStatus();
+            if (status === 'denied') {
+                setPushStatus('denied');
+                return;
+            }
+
+            if (status === 'granted') {
+                const hasSubscription = await checkExistingSubscription();
+                if (hasSubscription) {
+                    setPushStatus('subscribed');
+                    // Silently re-register with backend
+                    if (user?.id) {
+                        silentResubscribe(user.id);
+                    }
+                } else {
+                    // Permission granted but no subscription - need to subscribe
+                    setPushStatus('prompt');
+                }
+            } else {
+                // Permission is 'default' - need to ask
+                setPushStatus('prompt');
+            }
+        };
+
+        initPush();
+    }, [user]);
+
+    // Handle push notification enable button click (USER GESTURE - required for iOS)
+    const handleEnablePush = async () => {
+        if (!user?.id) return;
+
+        setPushStatus('subscribing');
+
+        const result = await subscribePush(user.id);
+
+        if (result.success) {
+            setPushStatus('subscribed');
+        } else if (result.reason === 'denied') {
+            setPushStatus('denied');
+        } else {
+            // Reset to prompt so user can try again
+            setPushStatus('prompt');
+        }
+    };
+
     useEffect(() => {
         // 1. Connect Socket
         connectSocket();
@@ -76,26 +138,19 @@ const Chat = ({ user }) => {
         // 2. Fetch History
         fetchMessages();
 
-        // 3. Register Push
-        if (user && user.id) {
-            registerPush(user.id);
-        }
-
-        // 4. Handle visibility change (iOS kills WebSocket in background)
+        // 3. Handle visibility change (iOS kills WebSocket in background)
         const handleVisibilityChange = () => {
             if (document.visibilityState === 'visible') {
                 console.log('App became visible, refreshing...');
-                // Reconnect socket if disconnected
                 if (!socketRef.current?.connected) {
                     connectSocket();
                 }
-                // Always re-fetch messages when coming back to foreground
                 fetchMessages();
             }
         };
         document.addEventListener('visibilitychange', handleVisibilityChange);
 
-        // 5. Handle Service Worker messages (push notification received while app is open)
+        // 4. Handle Service Worker messages (push notification received while app is open)
         const handleSWMessage = (event) => {
             if (event.data && event.data.type === 'NEW_MESSAGE') {
                 fetchMessages();
@@ -103,7 +158,7 @@ const Chat = ({ user }) => {
         };
         navigator.serviceWorker?.addEventListener('message', handleSWMessage);
 
-        // 6. Handle page focus (additional fallback for iOS)
+        // 5. Handle page focus (additional fallback for iOS)
         const handleFocus = () => {
             if (!socketRef.current?.connected) {
                 connectSocket();
@@ -112,7 +167,7 @@ const Chat = ({ user }) => {
         };
         window.addEventListener('focus', handleFocus);
 
-        // 7. Periodic check as final fallback (every 30s if tab is visible)
+        // 6. Periodic check as final fallback (every 30s if tab is visible)
         const intervalId = setInterval(() => {
             if (document.visibilityState === 'visible') {
                 if (!socketRef.current?.connected) {
@@ -165,6 +220,35 @@ const Chat = ({ user }) => {
         }
     };
 
+    // Render push notification banner
+    const renderPushBanner = () => {
+        if (pushStatus === 'prompt') {
+            return (
+                <div className="push-banner">
+                    <span>🔔 通知を有効にすると、新しいメッセージを受信できます</span>
+                    <button className="push-enable-btn" onClick={handleEnablePush}>
+                        通知を有効にする
+                    </button>
+                </div>
+            );
+        }
+        if (pushStatus === 'subscribing') {
+            return (
+                <div className="push-banner push-banner--loading">
+                    <span>⏳ 通知を設定中...</span>
+                </div>
+            );
+        }
+        if (pushStatus === 'denied') {
+            return (
+                <div className="push-banner push-banner--denied">
+                    <span>🔕 通知がブロックされています。端末の設定から許可してください。</span>
+                </div>
+            );
+        }
+        return null;
+    };
+
     return (
         <div className="chat-container">
             <header className="chat-header">
@@ -174,6 +258,8 @@ const Chat = ({ user }) => {
                     <span>{user.name}</span>
                 </div>
             </header>
+
+            {renderPushBanner()}
 
             <div className="messages-list">
                 {messages.map((msg, index) => {

@@ -14,88 +14,136 @@ const urlBase64ToUint8Array = (base64String) => {
 };
 
 /**
- * Check if running as iOS PWA (standalone mode)
+ * Check if push notifications are supported in this environment
  */
-const isIOSStandalone = () => {
-    return (
-        ('standalone' in window.navigator && window.navigator.standalone) ||
-        window.matchMedia('(display-mode: standalone)').matches
-    );
+export const isPushSupported = () => {
+    return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 };
 
-export const registerPush = async (user_id) => {
-    if (!('serviceWorker' in navigator)) {
-        console.warn('Service workers not supported');
-        return;
+/**
+ * Get current notification permission status
+ * Returns: 'granted', 'denied', 'default', or 'unsupported'
+ */
+export const getNotificationStatus = () => {
+    if (!('Notification' in window)) return 'unsupported';
+    return Notification.permission;
+};
+
+/**
+ * Check if already subscribed to push
+ */
+export const checkExistingSubscription = async () => {
+    if (!('serviceWorker' in navigator)) return false;
+    try {
+        const registration = await navigator.serviceWorker.ready;
+        const subscription = await registration.pushManager.getSubscription();
+        return !!subscription;
+    } catch {
+        return false;
     }
+};
+
+/**
+ * Register service worker only (no permission request)
+ * Called automatically on app load
+ */
+export const registerServiceWorker = async () => {
+    if (!('serviceWorker' in navigator)) return null;
 
     try {
-        // Register or update the service worker
         const registration = await navigator.serviceWorker.register('/line-fake2/sw.js', {
             scope: '/line-fake2/'
         });
+        console.log('Service Worker registered:', registration.scope);
+        return registration;
+    } catch (error) {
+        console.error('SW registration error:', error);
+        return null;
+    }
+};
 
-        // Wait for the service worker to be ready
+/**
+ * Subscribe to push notifications - MUST be called from a user gesture (click/tap)
+ * This is critical for iOS PWA support
+ */
+export const subscribePush = async (user_id) => {
+    if (!isPushSupported()) {
+        console.warn('Push notifications not supported');
+        return { success: false, reason: 'unsupported' };
+    }
+
+    try {
         const swReady = await navigator.serviceWorker.ready;
-        console.log('Service Worker ready:', swReady.scope);
 
-        // Check if Push API is available
-        if (!('PushManager' in window)) {
-            console.warn('Push notifications not supported in this browser');
-            // On iOS, PushManager is only available in standalone (PWA) mode
-            if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
-                if (!isIOSStandalone()) {
-                    console.warn('On iOS, push notifications require the app to be added to Home Screen');
-                }
-            }
-            return;
+        // Request permission - MUST be triggered by user gesture on iOS
+        const permission = await Notification.requestPermission();
+        console.log('Notification permission:', permission);
+
+        if (permission !== 'granted') {
+            return { success: false, reason: 'denied' };
         }
 
         const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
         if (!vapidKey) {
-            console.warn('VAPID key not configured');
-            return;
+            return { success: false, reason: 'no_vapid_key' };
         }
 
+        // Check for existing subscription first
         let subscription = await swReady.pushManager.getSubscription();
 
         if (!subscription) {
-            // Don't ask permission if the page is hidden
-            if (document.hidden) {
-                console.log('Page is hidden, deferring push subscription');
-                return;
-            }
-
-            const permission = await Notification.requestPermission();
-            if (permission !== 'granted') {
-                console.log('Notification permission denied');
-                return;
-            }
-
             subscription = await swReady.pushManager.subscribe({
                 userVisibleOnly: true,
                 applicationServerKey: urlBase64ToUint8Array(vapidKey)
             });
-
-            console.log('Push subscription created');
+            console.log('New push subscription created');
         } else {
-            console.log('Existing push subscription found');
+            console.log('Using existing push subscription');
         }
 
         // Send subscription to backend
         const response = await fetch(`${import.meta.env.VITE_API_URL}/subscribe.php`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ user_id, subscription })
+            body: JSON.stringify({ user_id, subscription: subscription.toJSON() })
         });
 
         if (response.ok) {
             console.log('Push subscription sent to server');
+            return { success: true };
         } else {
             console.error('Failed to send subscription:', response.status);
+            return { success: false, reason: 'server_error' };
         }
 
     } catch (error) {
-        console.error('Push registration error:', error);
+        console.error('Push subscription error:', error);
+        return { success: false, reason: error.message };
+    }
+};
+
+/**
+ * Try to silently re-register an existing subscription (no permission prompt)
+ * Safe to call from useEffect since it won't show any prompt
+ */
+export const silentResubscribe = async (user_id) => {
+    if (!isPushSupported()) return;
+    if (Notification.permission !== 'granted') return;
+
+    try {
+        const swReady = await navigator.serviceWorker.ready;
+        const subscription = await swReady.pushManager.getSubscription();
+
+        if (subscription) {
+            // Re-send existing subscription to backend (in case server lost it)
+            await fetch(`${import.meta.env.VITE_API_URL}/subscribe.php`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id, subscription: subscription.toJSON() })
+            });
+            console.log('Existing subscription re-sent to server');
+        }
+    } catch (error) {
+        console.error('Silent resubscribe error:', error);
     }
 };

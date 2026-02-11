@@ -19,7 +19,11 @@ cp .htaccess dist_server/
 
 # Copy Backend to dist_server/backend
 mkdir -p dist_server/backend
-cp -r backend/* dist_server/backend/
+cp -r backend/api dist_server/backend/
+cp -r backend/vendor dist_server/backend/
+cp backend/composer.json dist_server/backend/
+cp backend/composer.lock dist_server/backend/
+cp backend/schema.sql dist_server/backend/
 
 # Ensure uploads directory exists and has permissions (handled on server side usually)
 mkdir -p dist_server/backend/uploads

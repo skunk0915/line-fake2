@@ -65,37 +65,15 @@ if ($method === 'POST') {
     $stmt->execute([$messageId]);
     $newMessage = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    // Broadcast setup: Get subscriptions except sender
-    $subStmt = $pdo->prepare("SELECT * FROM push_subscriptions WHERE user_id != ?");
-    $subStmt->execute([$senderId]);
-    $subscriptions = $subStmt->fetchAll(PDO::FETCH_ASSOC);
-
-    $formattedSubs = [];
-    foreach ($subscriptions as $sub) {
-        $formattedSubs[] = [
-            'endpoint' => $sub['endpoint'],
-            'keys' => [
-                'p256dh' => $sub['p256dh'],
-                'auth' => $sub['auth']
-            ]
-        ];
+    // Send push notifications directly from PHP (no external server needed)
+    $pushResult = null;
+    try {
+        require_once 'push_helper.php';
+        $pushResult = sendPushNotifications($newMessage, $senderId);
+    } catch (Exception $e) {
+        error_log("Push notification error: " . $e->getMessage());
+        $pushResult = ['error' => $e->getMessage()];
     }
 
-    // Call Render Node Server
-    $broadcastPayload = json_encode(['message' => $newMessage, 'subscriptions' => $formattedSubs]);
-
-    $ch = curl_init(RENDER_URL . '/broadcast');
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $broadcastPayload);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-
-    // Don't wait too long for render response to keep PHP fast
-    curl_setopt($ch, CURLOPT_TIMEOUT_MS, 2000);
-
-    $result = curl_exec($ch);
-    $error = curl_error($ch);
-    curl_close($ch);
-
-    jsonResponse(['success' => true, 'message' => $newMessage, 'broadcast_result' => $result, 'broadcast_error' => $error]);
+    jsonResponse(['success' => true, 'message' => $newMessage, 'push_result' => $pushResult]);
 }

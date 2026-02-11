@@ -145,3 +145,56 @@
     border-radius: 10px;
     margin: 5px 0;
 }
+
+/* Push Notification Banner */
+.push-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    background: linear-gradient(135deg, #06c755, #04a645);
+    color: white;
+    font-size: 0.85rem;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.push-banner--loading {
+    background: linear-gradient(135deg, #f0ad4e, #ec971f);
+}
+
+.push-banner--denied {
+    background: linear-gradient(135deg, #d9534f, #c9302c);
+    font-size: 0.8rem;
+}
+
+.push-enable-btn {
+    padding: 6px 14px;
+    background: white;
+    color: #06c755;
+    border: none;
+    border-radius: 16px;
+    font-weight: bold;
+    font-size: 0.8rem;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: transform 0.15s ease;
+}
+
+.push-enable-btn:active {
+    transform: scale(0.95);
+}
+
+.sender-name {
+    font-size: 0.75rem;
+    color: #666;
+    margin-bottom: 2px;
+}
+
+.avatar-small {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
