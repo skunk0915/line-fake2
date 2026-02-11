@@ -17,38 +17,79 @@ const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3000';
 const Chat = ({ user }) => {
     const [messages, setMessages] = useState([]);
     const [users, setUsers] = useState([]);
+    const [groups, setGroups] = useState([]);
     const [input, setInput] = useState('');
-    const [image, setImage] = useState(null);
-    const [imagePreview, setImagePreview] = useState(null);
-    const [showModal, setShowModal] = useState(false);
+
+    // File upload (image, video, audio)
+    const [file, setFile] = useState(null);
+    const [filePreview, setFilePreview] = useState(null);
+    const [fileType, setFileType] = useState('image'); // 'image', 'video', 'audio'
+
+    const [showPreviewModal, setShowPreviewModal] = useState(false); // For previewing before send
+    const [selectedImage, setSelectedImage] = useState(null); // For viewing received images
+
     const [pushStatus, setPushStatus] = useState('loading');
-    const [recipientId, setRecipientId] = useState(0); // 0 = Global chat
+
+    // Chat Selection
+    const [recipientId, setRecipientId] = useState(0); // 0 = Global
+    const [recipientType, setRecipientType] = useState('user'); // 'user' (includes global 0) or 'group'
+
+    // Create Group Modal
+    const [showCreateGroup, setShowCreateGroup] = useState(false);
+    const [newGroupName, setNewGroupName] = useState('');
+    const [groupMembers, setGroupMembers] = useState([]);
+
+    // Recording
+    const [isRecording, setIsRecording] = useState(false);
+    const mediaRecorderRef = useRef(null);
+    const audioChunksRef = useRef([]);
+
     const socketRef = useRef();
     const messagesEndRef = useRef(null);
     const isFetchingRef = useRef(false);
 
-    // Fetch user list
-    const fetchUsers = useCallback(async () => {
-        try {
-            const res = await axios.get(`${API_URL}/users.php`);
-            if (res.data && res.data.users) {
-                setUsers(res.data.users);
+    // Initial Load & URL Params
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const urlReqId = params.get('recipient_id');
+        const urlReqType = params.get('recipient_type');
+
+        if (urlReqId) {
+            setRecipientId(parseInt(urlReqId, 10));
+            if (urlReqType === 'group') {
+                setRecipientType('group');
+            } else {
+                setRecipientType('user');
             }
-        } catch (err) {
-            console.error('Fetch users error:', err);
         }
     }, []);
+
+    // Fetch Data (Users & Groups)
+    const fetchData = useCallback(async () => {
+        if (!user?.id) return;
+        try {
+            const [uRes, gRes] = await Promise.all([
+                axios.get(`${API_URL}/users.php`),
+                axios.get(`${API_URL}/groups.php?user_id=${user.id}`)
+            ]);
+
+            if (uRes.data?.users) setUsers(uRes.data.users);
+            if (gRes.data?.groups) setGroups(gRes.data.groups);
+        } catch (err) {
+            console.error('Fetch data error:', err);
+        }
+    }, [user]);
 
     // Fetch messages from server
     const fetchMessages = useCallback(async () => {
         if (isFetchingRef.current || !user?.id) return;
         isFetchingRef.current = true;
         try {
-            // Add timestamp to prevent caching on iOS PWA
             const res = await axios.get(`${API_URL}/messages.php`, {
                 params: {
                     sender_id: user.id,
                     recipient_id: recipientId,
+                    recipient_type: recipientId === 0 ? 'user' : recipientType, // 0 is treated as user/global
                     _t: new Date().getTime()
                 }
             });
@@ -56,27 +97,21 @@ const Chat = ({ user }) => {
                 setMessages(res.data.messages);
             }
         } catch (err) {
-            console.error('Fetch error:', err);
+            console.error('Fetch messages error:', err);
         } finally {
             isFetchingRef.current = false;
         }
-    }, [user, recipientId]);
+    }, [user, recipientId, recipientType]);
 
-    // Connect / reconnect socket
+    // Connect Socket
     const connectSocket = useCallback(() => {
         if (socketRef.current?.connected) return;
-
-        if (socketRef.current) {
-            socketRef.current.disconnect();
-        }
+        if (socketRef.current) socketRef.current.disconnect();
 
         socketRef.current = io(SOCKET_URL, {
             transports: ['websocket', 'polling'],
             reconnection: true,
             reconnectionAttempts: 3,
-            reconnectionDelay: 2000,
-            reconnectionDelayMax: 10000,
-            timeout: 10000,
         });
 
         socketRef.current.on('connect', () => {
@@ -85,61 +120,61 @@ const Chat = ({ user }) => {
         });
 
         socketRef.current.on('chat_message', (msg) => {
-            // Only add message if it's relevant to this chat room
-            const isRelevant = (String(msg.recipient_id) === String(recipientId) && String(msg.sender_id) === String(user.id)) ||
-                (String(msg.recipient_id) === String(user.id) && String(msg.sender_id) === String(recipientId)) ||
-                (recipientId === 0 && String(msg.recipient_id) === "0");
-
-            if (!isRelevant) return;
-
-            setMessages((prev) => {
-                if (msg.id && prev.some(m => String(m.id) === String(msg.id))) {
-                    return prev;
+            // Determine relevance
+            // If group message
+            if (msg.recipient_type === 'group') {
+                if (recipientType === 'group' && String(msg.recipient_id) === String(recipientId)) {
+                    setMessages(prev => {
+                        if (msg.id && prev.some(m => String(m.id) === String(msg.id))) return prev;
+                        return [...prev, msg];
+                    });
                 }
-                return [...prev, msg];
-            });
+                return;
+            }
+
+            // If user message (global or 1-on-1)
+            // Logic similar to before but handle type
+            let isRelevant = false;
+
+            if (msg.recipient_id == 0) {
+                // Global
+                isRelevant = (recipientId === 0);
+            } else {
+                // 1-on-1
+                isRelevant = (
+                    (String(msg.recipient_id) === String(recipientId) && String(msg.sender_id) === String(user.id)) ||
+                    (String(msg.recipient_id) === String(user.id) && String(msg.sender_id) === String(recipientId))
+                );
+            }
+
+            if (isRelevant) {
+                setMessages(prev => {
+                    if (msg.id && prev.some(m => String(m.id) === String(msg.id))) return prev;
+                    return [...prev, msg];
+                });
+            }
         });
 
-        socketRef.current.on('disconnect', (reason) => {
-            console.log('Socket disconnected:', reason);
-        });
-    }, [fetchMessages, user, recipientId]);
+        socketRef.current.on('disconnect', () => { });
+    }, [fetchMessages, user, recipientId, recipientType]);
 
-    // Detect if running on mobile or as standalone PWA
-    const isMobileOrPWA = () => {
-        const isStandalone = window.matchMedia('(display-mode: standalone)').matches
-            || window.navigator.standalone === true;
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        return isMobile || isStandalone;
-    };
-
-    // Check push notification status on load
+    // Push Notification Setup
     useEffect(() => {
         const initPush = async () => {
             await registerServiceWorker();
-            if (!isMobileOrPWA()) {
-                setPushStatus('unsupported');
-                return;
-            }
+            // (Skipping mobile check for simplicity or user request)
             if (!isPushSupported()) {
                 setPushStatus('unsupported');
                 return;
             }
             const status = getNotificationStatus();
-            if (status === 'denied') {
-                setPushStatus('denied');
-                return;
-            }
             if (status === 'granted') {
-                const hasSubscription = await checkExistingSubscription();
-                if (hasSubscription) {
+                if (await checkExistingSubscription()) {
                     setPushStatus('subscribed');
-                    if (user?.id) {
-                        silentResubscribe(user.id);
-                    }
-                } else {
-                    setPushStatus('prompt');
-                }
+                    if (user?.id) silentResubscribe(user.id);
+                } else setPushStatus('prompt');
+            } else if (status === 'denied') {
+                setPushStatus('denied');
             } else {
                 setPushStatus('prompt');
             }
@@ -147,223 +182,227 @@ const Chat = ({ user }) => {
         initPush();
     }, [user]);
 
-    // Handle push notification enable (USER GESTURE)
     const handleEnablePush = async () => {
         if (!user?.id) return;
         setPushStatus('subscribing');
         const result = await subscribePush(user.id);
-        if (result.success) {
-            setPushStatus('subscribed');
-        } else if (result.reason === 'denied') {
-            setPushStatus('denied');
-        } else {
-            setPushStatus('prompt');
-        }
+        if (result.success) setPushStatus('subscribed');
+        else if (result.reason === 'denied') setPushStatus('denied');
+        else setPushStatus('prompt');
     };
 
+    // General Effects
     useEffect(() => {
         connectSocket();
         fetchMessages();
-        fetchUsers(); // Fetch users list on load
-
-        const handleVisibilityChange = () => {
-            if (document.visibilityState === 'visible') {
-                if (!socketRef.current?.connected) {
-                    connectSocket();
-                }
-                fetchMessages();
-                fetchUsers();
-                if (navigator.clearAppBadge) {
-                    navigator.clearAppBadge().catch(() => { });
-                }
-            }
-        };
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-
-        const handleSWMessage = (event) => {
-            if (event.data && event.data.type === 'NEW_MESSAGE') {
-                fetchMessages();
-            }
-        };
-        navigator.serviceWorker?.addEventListener('message', handleSWMessage);
+        fetchData();
 
         const handleFocus = () => {
-            if (!socketRef.current?.connected) {
-                connectSocket();
-            }
+            if (!socketRef.current?.connected) connectSocket();
             fetchMessages();
+            fetchData(); // Refresh groups too
         };
-        window.addEventListener('focus', handleFocus);
-
         const intervalId = setInterval(() => {
-            if (document.visibilityState === 'visible') {
-                fetchMessages();
-            }
-        }, 30000);
+            if (document.visibilityState === 'visible') fetchMessages();
+        }, 10000);
 
+        window.addEventListener('focus', handleFocus);
         return () => {
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-            navigator.serviceWorker?.removeEventListener('message', handleSWMessage);
             window.removeEventListener('focus', handleFocus);
             clearInterval(intervalId);
             socketRef.current?.disconnect();
         };
-    }, [user, connectSocket, fetchMessages]);
+    }, [user, connectSocket, fetchMessages, fetchData]);
 
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
 
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    };
+    const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
 
+    // Send Helpers
     const handleSend = async (e) => {
         e.preventDefault();
-        if (!input.trim() && !image) return;
+        if (!input.trim() && !file) return;
 
         const formData = new FormData();
         formData.append('sender_id', user.id);
         formData.append('recipient_id', recipientId);
+        formData.append('recipient_type', recipientId === 0 ? 'user' : recipientType);
+
         if (input) formData.append('content', input);
-        if (image) formData.append('image', image);
+        if (file) formData.append('file', file);
 
         try {
             await axios.post(`${API_URL}/messages.php`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
             setInput('');
-            setImage(null);
-            setImagePreview(null);
-            fetchMessages(); // Refresh after send
+            setFile(null);
+            setFilePreview(null);
+            setFileType('image');
+            fetchMessages();
         } catch (err) {
             console.error('Send error:', err);
         }
     };
 
-    const handleFileChange = (e) => {
+    const handleFileSelect = (e, type) => {
         if (e.target.files && e.target.files[0]) {
-            const file = e.target.files[0];
-            setImage(file);
+            const f = e.target.files[0];
+            setFile(f);
+            setFileType(type);
             const reader = new FileReader();
-            reader.onloadend = () => {
-                setImagePreview(reader.result);
+            reader.onloadend = () => setFilePreview(reader.result);
+            reader.readAsDataURL(f);
+        }
+    };
+
+    const startRecording = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorderRef.current = new MediaRecorder(stream);
+            audioChunksRef.current = [];
+
+            mediaRecorderRef.current.ondataavailable = event => {
+                if (event.data.size > 0) audioChunksRef.current.push(event.data);
             };
-            reader.readAsDataURL(file);
+
+            mediaRecorderRef.current.onstop = () => {
+                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                const audioFile = new File([audioBlob], "voice.webm", { type: 'audio/webm' });
+                setFile(audioFile);
+                setFileType('audio');
+                setFilePreview('🎤 音声メッセージ (' + (audioBlob.size / 1024).toFixed(1) + 'KB)');
+            };
+
+            mediaRecorderRef.current.start();
+            setIsRecording(true);
+        } catch (err) {
+            console.error("Mic error:", err);
+            alert("マイクへのアクセスが許可されていません");
         }
     };
 
-    const handleRemoveImage = () => {
-        setImage(null);
-        setImagePreview(null);
-    };
-
-    const parseDate = (dateStr) => {
-        if (!dateStr) return new Date();
-        // Replace '-' with '/' for iOS Safari compatibility
-        return new Date(dateStr.replace(/-/g, '/'));
-    };
-
-    const isDifferentDay = (date1, date2) => {
-        if (!date1) return true;
-        if (!date2) return false;
-        const d1 = parseDate(date1);
-        const d2 = parseDate(date2);
-        return d1.getFullYear() !== d2.getFullYear() ||
-            d1.getMonth() !== d2.getMonth() ||
-            d1.getDate() !== d2.getDate();
-    };
-
-    const formatDate = (dateStr) => {
-        const date = parseDate(dateStr);
-        if (isNaN(date.getTime())) return '日付不明';
-        return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
-    };
-
-    const formatTime = (dateStr) => {
-        const date = parseDate(dateStr);
-        if (isNaN(date.getTime())) return '--:--';
-        return date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
-    };
-
-    // Render push notification banner
-    const renderPushBanner = () => {
-        if (pushStatus === 'prompt') {
-            return (
-                <div className="push-banner">
-                    <span>🔔 通知を有効にすると、新しいメッセージを受信できます</span>
-                    <button className="push-enable-btn" onClick={handleEnablePush}>
-                        通知を有効にする
-                    </button>
-                </div>
-            );
+    const stopRecording = () => {
+        if (mediaRecorderRef.current && isRecording) {
+            mediaRecorderRef.current.stop();
+            setIsRecording(false);
+            // Stop tracks
+            mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
         }
-        if (pushStatus === 'subscribing') {
-            return (
-                <div className="push-banner push-banner--loading">
-                    <span>⏳ 通知を設定中...</span>
-                </div>
-            );
-        }
-        if (pushStatus === 'denied') {
-            return (
-                <div className="push-banner push-banner--denied">
-                    <span>🔕 通知がブロックされています。端末の設定から許可してください。</span>
-                </div>
-            );
-        }
-        return null;
+    };
+
+    // Group Creation
+    const handleCreateGroup = async () => {
+        if (!newGroupName.trim() || groupMembers.length === 0) return;
+        try {
+            const res = await axios.post(`${API_URL}/groups.php`, {
+                name: newGroupName,
+                created_by: user.id,
+                members: groupMembers
+            });
+            if (res.data.success) {
+                setShowCreateGroup(false);
+                setNewGroupName('');
+                setGroupMembers([]);
+                fetchData(); // Refresh groups
+            }
+        } catch (err) { console.error(err); }
+    };
+
+    const toggleGroupMember = (uid) => {
+        setGroupMembers(prev => prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]);
+    };
+
+    // Date Formatters
+    const formatDate = (d) => {
+        const date = new Date(d.replace(/-/g, '/'));
+        return isNaN(date) ? '' : `${date.getMonth() + 1}/${date.getDate()}`;
+    };
+    const formatTime = (d) => {
+        const date = new Date(d.replace(/-/g, '/'));
+        return isNaN(date) ? '' : date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
     };
 
     return (
         <div className="chat-container">
-            {renderPushBanner()}
+            {/* Push Banner */}
+            {pushStatus === 'prompt' && (
+                <div className="push-banner">
+                    <span>🔔 通知を有効にする</span>
+                    <button className="push-enable-btn" onClick={handleEnablePush}>有効化</button>
+                </div>
+            )}
 
+            {/* User/Group Selector */}
             <div className="user-selector">
-                <div
-                    className={`user-item ${recipientId === 0 ? 'active' : ''}`}
-                    onClick={() => setRecipientId(0)}
-                >
+                <div className={`user-item ${recipientId === 0 ? 'active' : ''}`}
+                    onClick={() => { setRecipientId(0); setRecipientType('user'); }}>
                     <div className="user-avatar global-icon">📢</div>
                     <span className="user-name-label">全体</span>
                 </div>
+
+                {/* Create Group Button */}
+                <div className="user-item" onClick={() => setShowCreateGroup(true)}>
+                    <div className="user-avatar create-group-icon" style={{ background: '#eee', fontSize: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>➕</div>
+                    <span className="user-name-label">作成</span>
+                </div>
+
+                {/* Groups */}
+                {groups.map(g => (
+                    <div key={`g-${g.id}`}
+                        className={`user-item ${recipientType === 'group' && String(recipientId) === String(g.id) ? 'active' : ''}`}
+                        onClick={() => { setRecipientId(g.id); setRecipientType('group'); }}>
+                        <div className="user-avatar group-icon" style={{ background: '#cceeff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>👥</div>
+                        <span className="user-name-label">{g.name}</span>
+                    </div>
+                ))}
+
+                {/* Users */}
                 {users.filter(u => String(u.id) !== String(user.id)).map(u => (
-                    <div
-                        key={u.id}
-                        className={`user-item ${String(recipientId) === String(u.id) ? 'active' : ''}`}
-                        onClick={() => setRecipientId(u.id)}
-                    >
+                    <div key={u.id}
+                        className={`user-item ${recipientType === 'user' && recipientId !== 0 && String(recipientId) === String(u.id) ? 'active' : ''}`}
+                        onClick={() => { setRecipientId(u.id); setRecipientType('user'); }}>
                         <img src={u.avatar_url} alt="" className="user-avatar" />
                         <span className="user-name-label">{u.name}</span>
                     </div>
                 ))}
             </div>
 
+            {/* Messages */}
             <div className="messages-list">
-                {messages.map((msg, index) => {
+                {messages.map((msg, idx) => {
                     const isMe = String(msg.sender_id) === String(user.id);
-                    const prevMsg = messages[index - 1];
-                    const showDateHeader = isDifferentDay(prevMsg?.created_at, msg.created_at);
-
                     return (
-                        <div key={msg.id || index}>
-                            {showDateHeader && (
-                                <div className="date-header">
-                                    <span>{formatDate(msg.created_at)}</span>
-                                </div>
-                            )}
-                            <div className={`message-row ${isMe ? 'my-message' : 'other-message'}`}>
-                                {!isMe && <img src={msg.sender_avatar} className="avatar-msg" alt="" />}
-                                <div className="message-content">
-                                    {msg.sender_name && !isMe && <span className="sender-name">{msg.sender_name}</span>}
-                                    <div className="message-bubble-row">
-                                        {isMe && <span className="timestamp">{formatTime(msg.created_at)}</span>}
-                                        <div className="bubble">
-                                            {msg.image_url && <img src={msg.image_url} className="message-image" alt="sent content" />}
-                                            {msg.content && <p className="message-text">{msg.content}</p>}
-                                        </div>
-                                        {!isMe && <span className="timestamp">{formatTime(msg.created_at)}</span>}
+                        <div key={msg.id || idx} className={`message-row ${isMe ? 'my-message' : 'other-message'}`}>
+                            {!isMe && <div className="avatar-wrapper">
+                                <img src={msg.sender_avatar} className="avatar-msg" alt="" />
+                                {recipientType === 'group' && <span className="sender-name-tiny">{msg.sender_name}</span>}
+                            </div>}
+                            <div className="message-content">
+                                <div className="message-bubble-row">
+                                    {isMe && <span className="timestamp">{formatTime(msg.created_at)}</span>}
+                                    <div className="bubble">
+                                        {msg.content && <p>{msg.content}</p>}
+                                        {msg.image_url && (
+                                            <>
+                                                {msg.type === 'video' ? (
+                                                    <video src={msg.image_url} controls className="message-image" />
+                                                ) : msg.type === 'audio' ? (
+                                                    <audio src={msg.image_url} controls className="message-audio" />
+                                                ) : (
+                                                    <img
+                                                        src={msg.image_url}
+                                                        className="message-image"
+                                                        alt="content"
+                                                        onClick={() => setSelectedImage(msg.image_url)}
+                                                    />
+                                                )}
+                                            </>
+                                        )}
                                     </div>
+                                    {!isMe && <span className="timestamp">{formatTime(msg.created_at)}</span>}
                                 </div>
                             </div>
                         </div>
@@ -372,46 +411,63 @@ const Chat = ({ user }) => {
                 <div ref={messagesEndRef} />
             </div>
 
+            {/* Input Area */}
             <form className="input-area" onSubmit={handleSend}>
-                <label htmlFor="file-upload" className="image-upload-btn">
-                    📷
-                </label>
-                <input
-                    id="file-upload"
-                    type="file"
-                    accept="image/*"
-                    style={{ display: 'none' }}
-                    onChange={handleFileChange}
-                />
+                {/* Image input */}
+                <label htmlFor="img-upload" className="icon-btn">📷</label>
+                <input id="img-upload" type="file" accept="image/*" style={{ display: 'none' }} onChange={e => handleFileSelect(e, 'image')} />
 
-                {imagePreview && (
-                    <div className="image-preview-wrapper">
-                        <img
-                            src={imagePreview}
-                            className="image-preview-thumb"
-                            alt="preview"
-                            onClick={() => setShowModal(true)}
-                        />
-                        <div className="image-preview-overlay">
-                            <button type="button" className="preview-btn remove-btn" onClick={handleRemoveImage}>✕</button>
-                            <label htmlFor="file-upload" className="preview-btn folder-btn">📁</label>
-                        </div>
+                {/* Video input */}
+                <label htmlFor="vid-upload" className="icon-btn">🎥</label>
+                <input id="vid-upload" type="file" accept="video/*" style={{ display: 'none' }} onChange={e => handleFileSelect(e, 'video')} />
+
+                {/* Audio Record */}
+                <button type="button" className={`icon-btn ${isRecording ? 'recording' : ''}`}
+                    onMouseDown={startRecording} onMouseUp={stopRecording} onTouchStart={startRecording} onTouchEnd={stopRecording}>
+                    🎤
+                </button>
+
+                {/* Preview */}
+                {filePreview && (
+                    <div className="preview-mini" onClick={() => setShowPreviewModal(true)}>
+                        {fileType === 'image' && <img src={filePreview} alt="preview" />}
+                        {fileType !== 'image' && <span>{fileType} selected</span>}
+                        <button type="button" className="close-preview" onClick={(e) => { e.stopPropagation(); setFile(null); setFilePreview(null); }}>✕</button>
                     </div>
                 )}
 
-                <input
-                    type="text"
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder="メッセージを入力..."
-                />
-                <button type="submit" disabled={!input.trim() && !image}>送信</button>
+                <input type="text" value={input} onChange={e => setInput(e.target.value)} placeholder="メッセージ..." />
+                <button type="submit" disabled={!input.trim() && !file}>送信</button>
             </form>
 
-            {showModal && imagePreview && (
-                <div className="image-modal" onClick={() => setShowModal(false)}>
+            {/* Modals */}
+            {selectedImage && (
+                <div className="image-modal" onClick={() => setSelectedImage(null)}>
                     <span className="close-modal">✕</span>
-                    <img src={imagePreview} alt="full preview" />
+                    <img src={selectedImage} alt="full view" onClick={e => e.stopPropagation()} />
+                </div>
+            )}
+
+            {/* Use selectedImage style modal for create group */}
+            {showCreateGroup && (
+                <div className="modal-overlay">
+                    <div className="create-group-modal">
+                        <h3>グループ作成</h3>
+                        <input type="text" placeholder="グループ名" value={newGroupName} onChange={e => setNewGroupName(e.target.value)} />
+                        <div className="member-select-list">
+                            {users.filter(u => String(u.id) !== String(user.id)).map(u => (
+                                <label key={u.id} className="member-option">
+                                    <input type="checkbox" checked={groupMembers.includes(u.id)} onChange={() => toggleGroupMember(u.id)} />
+                                    <img src={u.avatar_url} className="avatar-small" />
+                                    {u.name}
+                                </label>
+                            ))}
+                        </div>
+                        <div className="modal-actions">
+                            <button onClick={() => setShowCreateGroup(false)}>キャンセル</button>
+                            <button onClick={handleCreateGroup} className="active">作成</button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

@@ -23,7 +23,7 @@ function App() {
     <div className="app-container">
       {user ? (
         <>
-          <button onClick={handleLogout} className="logout-btn">Logout</button>
+
           <Chat user={user} />
         </>
       ) : (
