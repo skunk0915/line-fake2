@@ -44,15 +44,18 @@ do_build() {
     info ".htaccess をコピー..."
     cp .htaccess "$LOCAL_DIR/"
 
-    info "バックエンドをコピー..."
+    info "バックエンドを同期..."
+    # backend ディレクトリ全体を同期
     mkdir -p "$LOCAL_DIR/backend"
-    cp -r backend/api "$LOCAL_DIR/backend/"
-    cp -r backend/vendor "$LOCAL_DIR/backend/"
-    cp backend/composer.json "$LOCAL_DIR/backend/"
-    cp backend/composer.lock "$LOCAL_DIR/backend/"
-    cp backend/schema.sql "$LOCAL_DIR/backend/"
+    rsync -av --exclude 'uploads/*' --exclude 'node_modules' backend/ "$LOCAL_DIR/backend/"
     mkdir -p "$LOCAL_DIR/backend/uploads"
     touch "$LOCAL_DIR/backend/uploads/.gitkeep"
+
+    if [ -d "notification-server" ]; then
+        info "通知サーバーを同期..."
+        mkdir -p "$LOCAL_DIR/notification-server"
+        rsync -av --exclude 'node_modules' --exclude '.env' notification-server/ "$LOCAL_DIR/notification-server/"
+    fi
 
     info "ビルド完了！"
 }
@@ -68,10 +71,9 @@ do_upload() {
     info "  リモート:  $SERVER_USER@$SERVER_HOST:$REMOTE_PATH/"
 
     # rsync で同期（--delete で古いファイルも削除）
-    # config.php と uploads/ はサーバー側のみに存在するので除外
+    # uploads/ はサーバー側のみに存在するので除外
     rsync -avz --delete \
         --exclude '.DS_Store' \
-        --exclude 'backend/api/config.php' \
         --exclude 'backend/uploads/*' \
         --exclude '!backend/uploads/.gitkeep' \
         "$LOCAL_DIR/" \

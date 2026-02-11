@@ -19,13 +19,15 @@ cp .htaccess dist_server/
 
 # Copy Backend to dist_server/backend
 mkdir -p dist_server/backend
-cp -r backend/api dist_server/backend/
-cp -r backend/vendor dist_server/backend/
-cp backend/composer.json dist_server/backend/
-cp backend/composer.lock dist_server/backend/
-cp backend/schema.sql dist_server/backend/
+rsync -av --exclude 'api/config.php' --exclude 'uploads/*' --exclude 'node_modules' backend/ dist_server/backend/
 
-# Ensure uploads directory exists and has permissions (handled on server side usually)
+# Copy Notification Server if exists
+if [ -d "notification-server" ]; then
+    mkdir -p dist_server/notification-server
+    rsync -av --exclude 'node_modules' --exclude '.env' notification-server/ dist_server/notification-server/
+fi
+
+# Ensure uploads directory exists
 mkdir -p dist_server/backend/uploads
 touch dist_server/backend/uploads/.gitkeep
 
