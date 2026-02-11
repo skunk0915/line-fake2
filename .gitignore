@@ -1,0 +1,35 @@
+# General
+.DS_Store
+*.log
+.vscode/
+
+# Dependencies
+node_modules/
+vendor/
+
+# Environment Variables (Security)
+.env
+.env.local
+.env.*.local
+frontend/.env
+notification-server/.env
+
+# Build Outputs
+dist/
+build/
+frontend/dist/
+
+# Backend
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Security (config files)
+backend/api/config.php
+dist_server/backend/api/config.php
+**/config.php
+config.php
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

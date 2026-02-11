@@ -1,0 +1,18 @@
+<IfModule mod_headers.c>
+  # Google Sign-In Popup requirement
+  Header set Cross-Origin-Opener-Policy "same-origin-allow-popups"
+</IfModule>
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /line-fake2/
+
+  # Backend/API/Uploads pass-through
+  RewriteRule ^backend/ - [L]
+  RewriteRule ^api/ - [L]
+
+  # SPA Routing
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule . /line-fake2/index.html [L]
+</IfModule>
