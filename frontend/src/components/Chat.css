@@ -4,22 +4,23 @@
     flex-direction: column;
     height: 100vh;
     height: 100svh;
-    /* For mobile browsers with dynamic UI */
-    background-color: #8babd8;
+    background: radial-gradient(73.4% 100.98% at 95.54% 95.05%, rgba(255, 156, 65, 0.78) 0%, rgba(255, 168, 88, 0) 100%), linear-gradient(197.37deg, #FFF0A4 -0.38%, rgba(255, 240, 164, 0) 101.89%), radial-gradient(58.85% 73.83% at 9.82% 3.13%, rgba(49, 132, 255, 0.8) 0%, rgba(56, 75, 247, 0.208) 52.16%, rgba(62, 246, 246, 0) 100%), linear-gradient(117.39deg, #3E9EF6 3.91%, rgba(238, 43, 183, 0.33) 37.48%, rgba(246, 62, 106, 0) 73.98%), linear-gradient(306.53deg, #FFAADD 19.83%, rgba(255, 170, 221, 0) 97.33%);
+    background-blend-mode: darken, lighten, color-dodge, multiply, luminosity, screen;
     max-width: 1000px;
     width: 100%;
     margin: 0 auto;
     position: relative;
-    /* LINE classic blue-ish background */
     font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", Hiragino Kaku Gothic ProN, Hiragino Sans, Meiryo, sans-serif;
+    overflow: hidden;
 }
 
 .messages-list {
-    flex: 1;
+    height: 100%;
     overflow-y: auto;
-    padding: 10px 15px;
+    padding: 110px 15px 130px;
     display: flex;
     flex-direction: column;
+    z-index: 1;
 }
 
 .date-header {
@@ -29,11 +30,14 @@
 }
 
 .date-header span {
-    background-color: rgba(0, 0, 0, 0.15);
-    color: white;
-    padding: 2px 12px;
-    border-radius: 12px;
+    background-color: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    color: #444;
+    padding: 4px 16px;
+    border-radius: 20px;
     font-size: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .message-row {
@@ -93,28 +97,40 @@
 }
 
 .my-message .bubble {
-    background-color: #7cfc00;
-    /* LINE Green */
+    background-color: rgba(124, 252, 0, 0.4);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
     color: #000;
 }
 
 .other-message .bubble {
-    background-color: white;
+    background-color: rgba(255, 255, 255, 0.3);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
     color: black;
 }
 
 /* User Selector */
 .user-selector {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
     display: flex;
     overflow-x: auto;
-    padding: 10px;
-    background-color: rgba(255, 255, 255, 0.9);
-    border-bottom: 1px solid #ddd;
+    padding: 12px 10px;
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(35px) saturate(200%);
+    -webkit-backdrop-filter: blur(35px) saturate(200%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1), 0 4px 30px rgba(0, 0, 0, 0.05);
     gap: 15px;
     scrollbar-width: none;
-    position: sticky;
-    top: 0;
-    z-index: 10;
+    z-index: 20;
 }
 
 .user-selector::-webkit-scrollbar {
@@ -205,12 +221,22 @@
 
 /* Push Notification Banner */
 .push-banner {
+    position: absolute;
+    top: 75px;
+    left: 10px;
+    right: 10px;
+    z-index: 25;
+    border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 10px 16px;
-    background: linear-gradient(135deg, #06c755, #04a645);
-    color: white;
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    color: #333;
     font-size: 0.85rem;
     gap: 10px;
     flex-shrink: 0;
@@ -245,15 +271,20 @@
 
 /* Input Area */
 .input-area {
-    padding: 10px 15px;
-    background: #f8f8f8;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 20px 15px;
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(35px) saturate(200%);
+    -webkit-backdrop-filter: blur(35px) saturate(200%);
     display: flex;
     align-items: center;
-    border-top: 1px solid #ddd;
-    gap: 10px;
-    position: sticky;
-    bottom: 0;
-    z-index: 10;
+    border-top: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.1), 0 -4px 30px rgba(0, 0, 0, 0.05);
+    gap: 12px;
+    z-index: 20;
 }
 
 .input-area input[type="text"] {

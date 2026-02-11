@@ -1,14 +1,27 @@
 // Service Worker for Push Notifications and Offline Support
-const CACHE_NAME = 'chat-cache-v2';
+const CACHE_NAME = 'chat-cache-v3';
 
 // Install event - activate immediately
 self.addEventListener('install', (event) => {
     self.skipWaiting();
 });
 
-// Activate event - claim all clients immediately
+// Activate event - claim all clients and clear old caches
 self.addEventListener('activate', (event) => {
-    event.waitUntil(clients.claim());
+    event.waitUntil(
+        Promise.all([
+            clients.claim(),
+            caches.keys().then((cacheNames) => {
+                return Promise.all(
+                    cacheNames.map((cacheName) => {
+                        if (cacheName !== CACHE_NAME) {
+                            return caches.delete(cacheName);
+                        }
+                    })
+                );
+            })
+        ])
+    );
 });
 
 // Push notification handler
@@ -87,12 +100,5 @@ self.addEventListener('notificationclose', function (event) {
     );
 });
 
-// Fetch handler - network first, fallback to cache for app shell
-self.addEventListener('fetch', (event) => {
-    if (!event.request.url.startsWith(self.location.origin)) return;
-    if (event.request.url.includes('/api/') || event.request.url.includes('/broadcast')) return;
-
-    event.respondWith(
-        fetch(event.request).catch(() => caches.match(event.request))
-    );
-});
+// Fetch handler removed to avoid interception issues
+// Browser will handle all network requests directly
