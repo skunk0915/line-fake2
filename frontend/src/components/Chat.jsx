@@ -467,34 +467,61 @@ const Chat = ({ user }) => {
     };
 
     const handleFileDownload = async (url, fileName) => {
+        // Desktop check - skip share API on desktop windows to avoid confusing sharing menus
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
         // Try Web Share API for mobile devices (especially iOS)
-        if (navigator.share && navigator.canShare) {
+        if (isMobile && navigator.share) {
             try {
                 const response = await fetch(url);
                 const blob = await response.blob();
                 const file = new File([blob], fileName || 'download', { type: blob.type });
 
-                if (navigator.canShare({ files: [file] })) {
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
                     await navigator.share({
                         files: [file],
                         title: fileName || 'Download',
                     });
-                    return;
+                    return; // Successfully opened share menu
                 }
             } catch (err) {
+                // If user cancels, don't fall back to open in new tab (which causes iOS preview lock)
+                if (err.name === 'AbortError') {
+                    console.log('User cancelled sharing');
+                    return;
+                }
                 console.error('Share error:', err);
             }
         }
 
-        // Fallback for desktop or failed sharing
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = fileName || 'download';
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        // Fallback for desktop or if sharing failed/unsupported
+        // Use blob for desktop to ensure the 'download' attribute works even across origins
+        try {
+            const response = await fetch(url);
+            const blob = await response.blob();
+            const blobUrl = URL.createObjectURL(blob);
+
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = fileName || 'download';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            // Clean up backgrond blob
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+        } catch (err) {
+            console.error('Download error:', err);
+            // Absolute fallback: direct navigation in a new tab
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = fileName || 'download';
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
     };
 
     return (
