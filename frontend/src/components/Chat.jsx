@@ -372,10 +372,32 @@ const Chat = ({ user }) => {
         setShowHamburgerMenu(false);
     };
 
-    const downloadFile = (url, fileName) => {
+    const handleFileDownload = async (url, fileName) => {
+        // Try Web Share API for mobile devices (especially iOS)
+        if (navigator.share && navigator.canShare) {
+            try {
+                const response = await fetch(url);
+                const blob = await response.blob();
+                const file = new File([blob], fileName || 'download', { type: blob.type });
+
+                if (navigator.canShare({ files: [file] })) {
+                    await navigator.share({
+                        files: [file],
+                        title: fileName || 'Download',
+                    });
+                    return;
+                }
+            } catch (err) {
+                console.error('Share error:', err);
+            }
+        }
+
+        // Fallback for desktop or failed sharing
         const link = document.createElement('a');
         link.href = url;
         link.download = fileName || 'download';
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -543,7 +565,7 @@ const Chat = ({ user }) => {
                                                 <audio src={msg.file_url} controls className="message-audio" />
                                             )}
                                             {msg.type === 'file' && msg.file_url && (
-                                                <div className="file-attachment" onClick={() => downloadFile(msg.file_url, msg.file_name)}>
+                                                <div className="file-attachment" onClick={() => handleFileDownload(msg.file_url, msg.file_name)}>
                                                     <span className="file-icon">📄</span>
                                                     <span className="file-name">{msg.file_name || 'ファイル'}</span>
                                                 </div>
@@ -609,12 +631,16 @@ const Chat = ({ user }) => {
                     <span className="close-modal" onClick={() => setModalFile(null)}>✕</span>
                     <div className="modal-content" onClick={e => e.stopPropagation()}>
                         <img src={modalFile.file_url} alt="full preview" />
-                        <button className="save-btn" onClick={() => downloadFile(modalFile.file_url, modalFile.file_name || 'image.jpg')}>
-                            💾 保存
-                        </button>
+                        <div className="modal-actions-bar">
+                            <button className="save-btn" onClick={() => handleFileDownload(modalFile.file_url, modalFile.file_name || 'image.jpg')}>
+                                💾 保存 / 共有
+                            </button>
+                        </div>
+                        <p className="modal-hint">※ 保存できない場合は画像を長押ししてください</p>
                     </div>
                 </div>
             )}
+
             {showPushPrompt && (
                 <div className="push-prompt-overlay" onClick={() => { setShowPushPrompt(false); localStorage.setItem('push_prompted', 'true'); }}>
                     <div className="push-prompt-card" onClick={e => e.stopPropagation()}>
