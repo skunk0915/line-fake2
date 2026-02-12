@@ -56,7 +56,9 @@ const Chat = ({ user }) => {
     // Fetch user list
     const fetchUsers = useCallback(async () => {
         try {
-            const res = await axios.get(`${API_URL}/users.php`);
+            const res = await axios.get(`${API_URL}/users.php`, {
+                params: { my_id: user.id }
+            });
             if (res.data && res.data.users) {
                 setUsers(res.data.users);
                 // If no recipient selected yet, select the first other user
@@ -164,6 +166,7 @@ const Chat = ({ user }) => {
         if (chatWith !== null) {
             setRecipientId(parseInt(chatWith));
             setRecipientType(chatWith === '0' ? 'global' : type);
+            setManualScroll(false); // Reset scroll position when opening from notification
             // Clean up URL
             window.history.replaceState({}, '', window.location.pathname);
         }
@@ -227,11 +230,23 @@ const Chat = ({ user }) => {
         };
     }, [user, connectSocket, fetchMessages, fetchUsers, fetchGroups]);
 
+    const lastMessageCountRef = useRef(0);
+    const lastRecipientRef = useRef(null);
+
     useEffect(() => {
-        if (!manualScroll) {
-            scrollToBottom();
+        const recipientChanged = lastRecipientRef.current !== `${recipientType}-${recipientId}`;
+        const hasNewMessages = messages.length > lastMessageCountRef.current || recipientChanged;
+
+        if (hasNewMessages) {
+            if (!manualScroll || recipientChanged) {
+                scrollToBottom();
+                if (recipientChanged) setManualScroll(false);
+            }
         }
-    }, [messages, manualScroll]);
+
+        lastMessageCountRef.current = messages.length;
+        lastRecipientRef.current = `${recipientType}-${recipientId}`;
+    }, [messages, manualScroll, recipientId, recipientType]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -437,7 +452,10 @@ const Chat = ({ user }) => {
                             className={`user-item ${recipientType === 'group' && String(recipientId) === String(g.id) ? 'active' : ''}`}
                             onClick={() => { setRecipientId(g.id); setRecipientType('group'); setManualScroll(false); }}
                         >
-                            <div className="user-avatar group-icon">👥</div>
+                            <div className="user-avatar group-icon">
+                                👥
+                                {g.unread_count > 0 && <span className="unread-badge">{g.unread_count}</span>}
+                            </div>
                             <span className="user-name-label">{g.name}</span>
                         </div>
                     ))}
@@ -448,7 +466,10 @@ const Chat = ({ user }) => {
                             className={`user-item ${recipientType === 'user' && String(recipientId) === String(u.id) ? 'active' : ''}`}
                             onClick={() => { setRecipientId(u.id); setRecipientType('user'); setManualScroll(false); }}
                         >
-                            <img src={u.avatar_url} alt="" className="user-avatar" />
+                            <div className="user-avatar-container">
+                                <img src={u.avatar_url} alt="" className="user-avatar" />
+                                {u.unread_count > 0 && <span className="unread-badge">{u.unread_count}</span>}
+                            </div>
                             <span className="user-name-label">{u.name}</span>
                         </div>
                     ))}

@@ -9,8 +9,12 @@ if ($method === 'GET') {
 	$userId = $_GET['user_id'] ?? null;
 
 	if ($userId) {
-		// Fetch groups the user belongs to
-		$stmt = $pdo->prepare("SELECT g.* FROM chat_groups g 
+		// Fetch groups the user belongs to and calculate unread messages
+		$stmt = $pdo->prepare("SELECT g.*, 
+                               (SELECT COUNT(*) FROM messages m 
+                                WHERE m.recipient_id = g.id AND m.recipient_type = 'group' 
+                                AND m.created_at > gm.last_read_at AND m.is_deleted = FALSE) as unread_count
+                               FROM chat_groups g 
                                JOIN chat_group_members gm ON g.id = gm.group_id 
                                WHERE gm.user_id = ?");
 		$stmt->execute([$userId]);
@@ -18,7 +22,7 @@ if ($method === 'GET') {
 		jsonResponse(['groups' => $groups]);
 	} else {
 		// Fetch all groups (for selection)
-		$stmt = $pdo->query("SELECT * FROM chat_groups");
+		$stmt = $pdo->query("SELECT *, 0 as unread_count FROM chat_groups");
 		$groups = $stmt->fetchAll(PDO::FETCH_ASSOC);
 		jsonResponse(['groups' => $groups]);
 	}

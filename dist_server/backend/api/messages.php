@@ -10,10 +10,6 @@ if ($method === 'GET') {
     $recipientId = $_GET['recipient_id'] ?? 0;
     $recipientType = $_GET['recipient_type'] ?? 'user';
 
-    if ($recipientId == 0) {
-        $recipientId = 1;
-    }
-
 
     $pdo = getDbConnection();
 
@@ -26,6 +22,12 @@ if ($method === 'GET') {
                 LIMIT 100";
         $stmt = $pdo->query($sql);
     } elseif ($recipientType === 'group') {
+        // Mark as read for groups
+        if ($senderId) {
+            $upd = $pdo->prepare("UPDATE chat_group_members SET last_read_at = CURRENT_TIMESTAMP WHERE group_id = ? AND user_id = ?");
+            $upd->execute([$recipientId, $senderId]);
+        }
+
         $sql = "SELECT m.*, u.name as sender_name, u.avatar_url as sender_avatar 
                 FROM messages m
                 JOIN users u ON m.sender_id = u.id
@@ -36,6 +38,12 @@ if ($method === 'GET') {
         $stmt->execute([$recipientId]);
     } else {
         // 1-on-1
+        // Mark as read (messages sent by the OTHER person to ME)
+        if ($senderId && $recipientId) {
+            $upd = $pdo->prepare("UPDATE messages SET is_read = TRUE WHERE sender_id = ? AND recipient_id = ? AND recipient_type = 'user'");
+            $upd->execute([$recipientId, $senderId]);
+        }
+
         $sql = "SELECT m.*, u.name as sender_name, u.avatar_url as sender_avatar 
                 FROM messages m
                 JOIN users u ON m.sender_id = u.id
@@ -76,7 +84,7 @@ if ($method === 'POST') {
     $content = $_POST['content'] ?? null;
     $type = $_POST['type'] ?? 'text'; // From frontend: text, image, video, audio, file
 
-    if ($recipientId == 0) {
+    if ($recipientType === 'global' || (int)$recipientId === 0) {
         $recipientType = 'global';
     }
 
