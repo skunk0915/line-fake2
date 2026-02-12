@@ -165,45 +165,64 @@ const Chat = ({ user }) => {
 
     useEffect(() => {
         // Handle deep link (notifications & invitations)
-        const params = new URLSearchParams(window.location.search);
+        const parseUrlParams = (urlStr) => {
+            const url = new URL(urlStr, window.location.origin);
+            const params = url.searchParams;
 
-        // 1. Check for invitation
-        const invToken = params.get('invitation_token');
-        if (invToken && user) {
-            axios.post(`${API_URL}/claim_invite.php`, {
-                user_id: user.id,
-                token: invToken
-            })
-                .then(res => {
-                    if (res.data.success) {
-                        alert('招待を受け取りました！友だちリストに追加されました。');
-                        fetchUsers(); // Refresh list to see the new friend
-                    } else {
-                        console.warn(res.data.message);
-                    }
+            // 1. Check for invitation
+            const invToken = params.get('invitation_token');
+            if (invToken && user) {
+                axios.post(`${API_URL}/claim_invite.php`, {
+                    user_id: user.id,
+                    token: invToken
                 })
-                .catch(err => console.error('Claim invite error:', err))
-                .finally(() => {
-                    // Clear URL param
-                    const url = new URL(window.location);
-                    url.searchParams.delete('invitation_token');
-                    window.history.replaceState({}, '', url);
-                });
+                    .then(res => {
+                        if (res.data.success) {
+                            alert('招待を受け取りました！友だちリストに追加されました。');
+                            fetchUsers(); // Refresh list to see the new friend
+                        }
+                    })
+                    .catch(err => console.error('Claim invite error:', err));
+            }
+
+            // 2. Check for chat link
+            const chatWith = params.get('chat_with');
+            const type = params.get('type') || 'user';
+            if (chatWith !== null) {
+                setRecipientId(parseInt(chatWith));
+                setRecipientType(chatWith === '0' ? 'global' : type);
+                setManualScroll(false);
+            }
+        };
+
+        // Initial check from URL
+        parseUrlParams(window.location.href);
+
+        // Listen for messages from Service Worker (for existing window navigation)
+        const handleSWMessage = (event) => {
+            if (event.data?.type === 'NAVIGATE') {
+                parseUrlParams(event.data.url);
+            }
+        };
+
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.addEventListener('message', handleSWMessage);
         }
 
-        // 2. Check for chat link
-        const chatWith = params.get('chat_with');
-        const type = params.get('type') || 'user';
-        if (chatWith !== null) {
-            setRecipientId(parseInt(chatWith));
-            setRecipientType(chatWith === '0' ? 'global' : type);
-            setManualScroll(false); // Reset scroll position when opening from notification
-            // Clean up URL
+        // Clean up URL if needed (only once)
+        if (window.location.search) {
             const url = new URL(window.location);
             url.searchParams.delete('chat_with');
             url.searchParams.delete('type');
+            url.searchParams.delete('invitation_token');
             window.history.replaceState({}, '', url);
         }
+
+        return () => {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.removeEventListener('message', handleSWMessage);
+            }
+        };
     }, [user, fetchUsers]);
 
     useEffect(() => {
@@ -244,6 +263,8 @@ const Chat = ({ user }) => {
         const handleVisibilityChange = () => {
             if (document.visibilityState === 'visible') {
                 fetchMessages();
+                fetchUsers();
+                fetchGroups();
                 if (navigator.clearAppBadge) navigator.clearAppBadge().catch(() => { });
             }
         };
@@ -253,6 +274,8 @@ const Chat = ({ user }) => {
             // Even if socket is connected, poll occasionally as safety, 
             // but definitely poll if socket is disconnected
             fetchMessages();
+            fetchUsers();
+            fetchGroups();
         }, 5000);
 
         document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -268,19 +291,23 @@ const Chat = ({ user }) => {
     const lastRecipientRef = useRef(null);
 
     useEffect(() => {
-        const recipientChanged = lastRecipientRef.current !== `${recipientType}-${recipientId}`;
-        const hasNewMessages = messages.length > lastMessageCountRef.current || recipientChanged;
+        const recipientKey = `${recipientType}-${recipientId}`;
+        const recipientChanged = lastRecipientRef.current !== recipientKey;
+        const hasNewMessages = messages.length > lastMessageCountRef.current;
 
-        if (hasNewMessages) {
-            if (!manualScroll || recipientChanged) {
-                scrollToBottom();
-                if (recipientChanged) setManualScroll(false);
+        if (recipientChanged || (hasNewMessages && !manualScroll)) {
+            scrollToBottom();
+            if (recipientChanged) {
+                setManualScroll(false);
+                // Also refresh user list to clear badges for this room
+                fetchUsers();
+                fetchGroups();
             }
         }
 
         lastMessageCountRef.current = messages.length;
-        lastRecipientRef.current = `${recipientType}-${recipientId}`;
-    }, [messages, manualScroll, recipientId, recipientType]);
+        lastRecipientRef.current = recipientKey;
+    }, [messages.length, manualScroll, recipientId, recipientType, fetchUsers, fetchGroups]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -288,14 +315,14 @@ const Chat = ({ user }) => {
 
     const handleScroll = (e) => {
         const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
-        const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+        // Check if we are at the bottom (within 20px threshold)
+        const isAtBottom = scrollHeight - scrollTop - clientHeight < 20;
+
         if (isAtBottom) {
             setManualScroll(false);
         } else {
-            // User scrolled up
-            // Don't set manualScroll to true if it was already false and we just scrolled a tiny bit
-            // but if they are significantly up, stop auto-scroll
-            if (scrollHeight - scrollTop - clientHeight > 100) {
+            // If the user has scrolled up more than 30px from bottom, consider it manual scroll
+            if (scrollHeight - scrollTop - clientHeight > 30) {
                 setManualScroll(true);
             }
         }
@@ -329,6 +356,8 @@ const Chat = ({ user }) => {
                 setFilePreview(null);
                 setManualScroll(false);
                 fetchMessages();
+                fetchUsers();
+                fetchGroups();
             }
         } catch (err) {
             console.error('Send error details:', err.response?.data || err.message);
@@ -536,7 +565,7 @@ const Chat = ({ user }) => {
                         >
                             <div className="user-avatar group-icon">
                                 👥
-                                {g.unread_count > 0 && <span className="unread-badge">{g.unread_count}</span>}
+                                {g.unread_count > 0 && (recipientType !== 'group' || String(recipientId) !== String(g.id)) && <span className="unread-badge">{g.unread_count}</span>}
                             </div>
                             <span className="user-name-label">{g.name}</span>
                         </div>
@@ -550,7 +579,7 @@ const Chat = ({ user }) => {
                         >
                             <div className="user-avatar-container">
                                 <img src={u.avatar_url} alt="" className="user-avatar" />
-                                {u.unread_count > 0 && <span className="unread-badge">{u.unread_count}</span>}
+                                {u.unread_count > 0 && (recipientType !== 'user' || String(recipientId) !== String(u.id)) && <span className="unread-badge">{u.unread_count}</span>}
                             </div>
                             <span className="user-name-label">{u.name}</span>
                         </div>

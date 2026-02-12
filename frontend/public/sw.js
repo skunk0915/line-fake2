@@ -1,5 +1,5 @@
 // Service Worker for Push Notifications and Offline Support
-const CACHE_NAME = 'chat-cache-v4';
+const CACHE_NAME = 'chat-cache-v5';
 
 // Install event - activate immediately
 self.addEventListener('install', (event) => {
@@ -72,14 +72,15 @@ self.addEventListener('notificationclick', function (event) {
 
             // Focus or open window
             clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
+                const targetUrl = event.notification.data.url || '/line-fake2/';
                 for (const client of clientList) {
                     if (client.url.includes('/line-fake2/') && 'focus' in client) {
-                        // Tell client to clear badge too
-                        client.postMessage({ type: 'CLEAR_BADGE' });
+                        // Tell client to navigate to the new room
+                        client.postMessage({ type: 'NAVIGATE', url: targetUrl });
                         return client.focus();
                     }
                 }
-                return clients.openWindow(event.notification.data.url || '/line-fake2/');
+                return clients.openWindow(targetUrl);
             })
         ])
     );
