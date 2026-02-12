@@ -31,9 +31,9 @@
   RewriteRule ^sw\.js$ - [L]
   RewriteRule ^manifest\.json$ - [L]
 
-  # SPA Routing
-  RewriteCond %{REQUEST_FILENAME} !-f
-  RewriteCond %{REQUEST_FILENAME} !-d
-  RewriteRule . /line-fake2/index.html [L]
+  # SPA Routing - Temporarily Disabled for Troubleshooting
+# RewriteCond %{REQUEST_FILENAME} !-f
+# RewriteCond %{REQUEST_FILENAME} !-d
+# RewriteRule . /line-fake2/index.html [L]
 </IfModule>
 

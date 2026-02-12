@@ -14,12 +14,22 @@ if (!$idToken) {
     jsonResponse(['error' => 'ID Token required'], 400);
 }
 
-// Verify ID Token via Google Endpoint
-$url = "https://oauth2.googleapis.com/tokeninfo?id_token=" . $idToken;
-$response = file_get_contents($url);
+// Verify Access Token via Google UserInfo Endpoint
+$url = "https://www.googleapis.com/oauth2/v3/userinfo?access_token=" . $idToken;
+
+$ch = curl_init();
+curl_setopt($ch, CURLOPT_URL, $url);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_USERAGENT, 'LineFake/1.0');
+$response = curl_exec($ch);
+if ($response === false) {
+    jsonResponse(['error' => 'Google verification failed: ' . curl_error($ch)], 500);
+}
+curl_close($ch);
+
 $payload = json_decode($response, true);
 
-if (!$payload || isset($payload['error_description'])) {
+if (!$payload || isset($payload['error'])) {
     jsonResponse(['error' => 'Invalid Google Token'], 401);
 }
 

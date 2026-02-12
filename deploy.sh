@@ -34,7 +34,7 @@ do_build() {
 
     info "フロントエンドをビルド中..."
     cd frontend
-    npm install --silent
+    # npm install --silent  # skip install to speed up if node_modules exists
     npm run build
     cd ..
 
