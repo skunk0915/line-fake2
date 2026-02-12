@@ -25,6 +25,7 @@ const Chat = ({ user, setUser }) => {
     const [modalFile, setModalFile] = useState(null);
     const [pushStatus, setPushStatus] = useState('loading');
     const [showPushPrompt, setShowPushPrompt] = useState(false);
+    const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
     // Chat Selection
     const [recipientId, setRecipientId] = useState(null);
@@ -83,9 +84,6 @@ const Chat = ({ user, setUser }) => {
                     if (firstOther) {
                         setRecipientId(firstOther.id);
                         setRecipientType('user');
-                    } else {
-                        // If no other users found (e.g. only me), maybe select nothing or self?
-                        // For now keep null
                     }
                 }
             }
@@ -112,6 +110,7 @@ const Chat = ({ user, setUser }) => {
     const fetchMessages = useCallback(async () => {
         if (isFetchingRef.current || !user?.id) return;
         isFetchingRef.current = true;
+        setIsLoadingMessages(true);
         try {
             const res = await axios.get(`${API_URL}/messages.php`, {
                 params: {
@@ -128,6 +127,7 @@ const Chat = ({ user, setUser }) => {
             console.error('Fetch error:', err);
         } finally {
             isFetchingRef.current = false;
+            setIsLoadingMessages(false);
         }
     }, [user, recipientId, recipientType]);
 
@@ -140,11 +140,11 @@ const Chat = ({ user, setUser }) => {
         }
 
         socketRef.current = io(SOCKET_URL, {
-            transports: ['polling', 'websocket'], // Prefer polling as fallback on shared hosting
+            transports: ['polling', 'websocket'],
             reconnection: true,
-            path: '/socket.io', // Ensure path matches server expectation
+            path: '/socket.io',
             secure: true,
-            rejectUnauthorized: false // Sometimes needed for specific SSL setups on shared hosting
+            rejectUnauthorized: false
         });
 
         socketRef.current.on('connect', () => {
@@ -175,7 +175,17 @@ const Chat = ({ user, setUser }) => {
                 String(m.id) === String(message_id) ? { ...m, is_deleted: true, content: 'メッセージが削除されました' } : m
             ));
         });
-    }, [fetchMessages, user, recipientId, recipientType]);
+
+        socketRef.current.on('group_updated', () => {
+            fetchGroups();
+            fetchUsers();
+        });
+
+        socketRef.current.on('user_updated', () => {
+            fetchUsers();
+            fetchGroups();
+        });
+    }, [fetchMessages, fetchUsers, fetchGroups, user, recipientId, recipientType]);
 
     useEffect(() => {
         // Handle deep link (notifications & invitations)
@@ -183,7 +193,6 @@ const Chat = ({ user, setUser }) => {
             const url = new URL(urlStr, window.location.origin);
             const params = url.searchParams;
 
-            // 1. Check for invitation
             const invToken = params.get('invitation_token');
             if (invToken && user) {
                 axios.post(`${API_URL}/claim_invite.php`, {
@@ -193,13 +202,12 @@ const Chat = ({ user, setUser }) => {
                     .then(res => {
                         if (res.data.success) {
                             alert('招待を受け取りました！友だちリストに追加されました。');
-                            fetchUsers(); // Refresh list to see the new friend
+                            fetchUsers();
                         }
                     })
                     .catch(err => console.error('Claim invite error:', err));
             }
 
-            // 2. Check for chat link
             const chatWith = params.get('chat_with');
             const type = params.get('type') || 'user';
             if (chatWith !== null) {
@@ -209,10 +217,8 @@ const Chat = ({ user, setUser }) => {
             }
         };
 
-        // Initial check from URL
         parseUrlParams(window.location.href);
 
-        // Listen for messages from Service Worker (for existing window navigation)
         const handleSWMessage = (event) => {
             if (event.data?.type === 'NAVIGATE') {
                 parseUrlParams(event.data.url);
@@ -223,7 +229,6 @@ const Chat = ({ user, setUser }) => {
             navigator.serviceWorker.addEventListener('message', handleSWMessage);
         }
 
-        // Clean up URL if needed (only once)
         if (window.location.search) {
             const url = new URL(window.location);
             url.searchParams.delete('chat_with');
@@ -283,10 +288,7 @@ const Chat = ({ user, setUser }) => {
             }
         };
 
-        // Polling fallback (every 5 seconds)
         const pollInterval = setInterval(() => {
-            // Even if socket is connected, poll occasionally as safety, 
-            // but definitely poll if socket is disconnected
             fetchMessages();
             fetchUsers();
             fetchGroups();
@@ -313,7 +315,6 @@ const Chat = ({ user, setUser }) => {
             scrollToBottom();
             if (recipientChanged) {
                 setManualScroll(false);
-                // Also refresh user list to clear badges for this room
                 fetchUsers();
                 fetchGroups();
             }
@@ -329,13 +330,11 @@ const Chat = ({ user, setUser }) => {
 
     const handleScroll = (e) => {
         const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
-        // Check if we are at the bottom (within 20px threshold)
         const isAtBottom = scrollHeight - scrollTop - clientHeight < 20;
 
         if (isAtBottom) {
             setManualScroll(false);
         } else {
-            // If the user has scrolled up more than 30px from bottom, consider it manual scroll
             if (scrollHeight - scrollTop - clientHeight > 30) {
                 setManualScroll(true);
             }
@@ -361,10 +360,8 @@ const Chat = ({ user, setUser }) => {
         }
 
         try {
-            console.log('Sending message...', { recipientId, recipientType, contentType: selectedFile?.type });
             const res = await axios.post(`${API_URL}/messages.php`, formData);
             if (res.data.success) {
-                console.log('Send success');
                 setInput('');
                 setSelectedFile(null);
                 setFilePreview(null);
@@ -374,8 +371,8 @@ const Chat = ({ user, setUser }) => {
                 fetchGroups();
             }
         } catch (err) {
-            console.error('Send error details:', err.response?.data || err.message);
-            alert('送信に失敗しました: ' + (err.response?.data?.error || err.message));
+            console.error('Send error:', err);
+            alert('送信に失敗しました');
         }
     };
 
@@ -499,7 +496,7 @@ const Chat = ({ user, setUser }) => {
             }
         } catch (err) {
             console.error('Invite error:', err);
-            alert('招待に失敗しました: ' + (err.response?.data?.error || err.message));
+            alert('招待に失敗しました');
         }
     };
 
@@ -515,9 +512,7 @@ const Chat = ({ user, setUser }) => {
         const formData = new FormData();
         formData.append('user_id', user.id);
         formData.append('name', profileName);
-        if (profileAvatarFile) {
-            formData.append('avatar', profileAvatarFile);
-        }
+        if (profileAvatarFile) formData.append('avatar', profileAvatarFile);
 
         try {
             const res = await axios.post(`${API_URL}/users.php`, formData);
@@ -552,9 +547,7 @@ const Chat = ({ user, setUser }) => {
         const formData = new FormData();
         formData.append('group_id', editingGroup.id);
         formData.append('name', groupEditName);
-        if (groupEditAvatarFile) {
-            formData.append('avatar', groupEditAvatarFile);
-        }
+        if (groupEditAvatarFile) formData.append('avatar', groupEditAvatarFile);
 
         try {
             const res = await axios.post(`${API_URL}/groups.php`, formData);
@@ -601,52 +594,34 @@ const Chat = ({ user, setUser }) => {
     };
 
     const handleFileDownload = async (url, fileName) => {
-        // Desktop check - skip share API on desktop windows to avoid confusing sharing menus
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
-        // Try Web Share API for mobile devices (especially iOS)
         if (isMobile && navigator.share) {
             try {
                 const response = await fetch(url);
                 const blob = await response.blob();
                 const file = new File([blob], fileName || 'download', { type: blob.type });
-
                 if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                    await navigator.share({
-                        files: [file],
-                        title: fileName || 'Download',
-                    });
-                    return; // Successfully opened share menu
-                }
-            } catch (err) {
-                // If user cancels, don't fall back to open in new tab (which causes iOS preview lock)
-                if (err.name === 'AbortError') {
-                    console.log('User cancelled sharing');
+                    await navigator.share({ files: [file], title: fileName || 'Download' });
                     return;
                 }
+            } catch (err) {
+                if (err.name === 'AbortError') return;
                 console.error('Share error:', err);
             }
         }
-
-        // Fallback for desktop or if sharing failed/unsupported
-        // Use blob for desktop to ensure the 'download' attribute works even across origins
         try {
             const response = await fetch(url);
             const blob = await response.blob();
             const blobUrl = URL.createObjectURL(blob);
-
             const link = document.createElement('a');
             link.href = blobUrl;
             link.download = fileName || 'download';
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-
-            // Clean up backgrond blob
             setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
         } catch (err) {
             console.error('Download error:', err);
-            // Absolute fallback: direct navigation in a new tab
             const link = document.createElement('a');
             link.href = url;
             link.download = fileName || 'download';
@@ -708,7 +683,6 @@ const Chat = ({ user, setUser }) => {
                 <div className="menu-overlay" onClick={() => setShowHamburgerMenu(false)}>
                     <div className="hamburger-menu" onClick={e => e.stopPropagation()}>
                         <div className="menu-header">設定</div>
-
                         <div className="menu-item-group">
                             <label>プロフィール編集</label>
                             <div className="profile-edit-section">
@@ -721,13 +695,7 @@ const Chat = ({ user, setUser }) => {
                                         </label>
                                     </div>
                                     <div className="name-input-group">
-                                        <input
-                                            type="text"
-                                            value={profileName}
-                                            onChange={e => setProfileName(e.target.value)}
-                                            placeholder="お名前"
-                                            required
-                                        />
+                                        <input type="text" value={profileName} onChange={e => setProfileName(e.target.value)} placeholder="お名前" required />
                                     </div>
                                     <button type="submit" className="profile-save-btn" disabled={isUpdatingProfile}>
                                         {isUpdatingProfile ? '更新中...' : '保存'}
@@ -739,15 +707,9 @@ const Chat = ({ user, setUser }) => {
                         <div className="menu-item-group">
                             <label>通知設定</label>
                             <div className="notification-settings">
-                                {pushStatus === 'unsupported' && (
-                                    <p className="status-msg warning">このブラウザは通知に対応していません</p>
-                                )}
-                                {pushStatus === 'denied' && (
-                                    <p className="status-msg error">通知がブロックされています。設定から許可してください。</p>
-                                )}
-                                {pushStatus === 'subscribed' && (
-                                    <p className="status-msg success">✅ 通知は有効です</p>
-                                )}
+                                {pushStatus === 'unsupported' && <p className="status-msg warning">このブラウザは通知に対応していません</p>}
+                                {pushStatus === 'denied' && <p className="status-msg error">通知がブロックされています。設定から許可してください。</p>}
+                                {pushStatus === 'subscribed' && <p className="status-msg success">✅ 通知は有効です</p>}
                                 {(pushStatus === 'prompt' || pushStatus === 'denied' || pushStatus === 'subscribed') && (
                                     <div className="notification-actions">
                                         <button
@@ -757,7 +719,7 @@ const Chat = ({ user, setUser }) => {
                                                 const result = await subscribePush(user.id);
                                                 if (result.success) setPushStatus('subscribed');
                                                 else if (result.reason === 'denied') setPushStatus('denied');
-                                                else alert('通知の設定に失敗しました: ' + (result.reason || 'unknown'));
+                                                else alert('通知の設定に失敗しました');
                                             }}
                                         >
                                             {pushStatus === 'subscribed' ? '通知設定を更新' : '通知を有効にする'}
@@ -772,11 +734,7 @@ const Chat = ({ user, setUser }) => {
                             <label>テーマ変更</label>
                             <div className="theme-grid">
                                 {themes.map(t => (
-                                    <div
-                                        key={t.id}
-                                        className={`theme-option ${currentTheme === t.id ? 'active' : ''}`}
-                                        onClick={() => toggleTheme(t.id)}
-                                    >
+                                    <div key={t.id} className={`theme-option ${currentTheme === t.id ? 'active' : ''}`} onClick={() => toggleTheme(t.id)}>
                                         <div className="theme-preview" style={{ background: t.background }}></div>
                                         <span>{t.name}</span>
                                     </div>
@@ -787,44 +745,110 @@ const Chat = ({ user, setUser }) => {
                 </div>
             )}
 
+            <div className={`main-chat ${showHamburgerMenu ? 'menu-open' : ''}`}>
+                <div className="chat-header">
+                    <span className="recipient-name">
+                        {recipientType === 'global' ? 'Global Chat' : (
+                            recipientType === 'group' ? (groups.find(g => String(g.id) === String(recipientId))?.name || 'Group Chat') : (users.find(u => String(u.id) === String(recipientId))?.name || 'Chat')
+                        )}
+                    </span>
+                    {isLoadingMessages && <div className="loading-dots"><span>.</span><span>.</span><span>.</span></div>}
+                </div>
+
+                <div className="messages-list" ref={messagesListRef} onScroll={handleScroll}>
+                    {messages.length === 0 && !isLoadingMessages && (
+                        <div className="empty-chat">
+                            <div className="empty-icon">💬</div>
+                            <p>まだメッセージがありません</p>
+                        </div>
+                    )}
+
+                    {isLoadingMessages && messages.length === 0 && (
+                        <div className="loading-container">
+                            <div className="loading-spinner-premium"></div>
+                            <p>読み込み中...</p>
+                        </div>
+                    )}
+
+                    {messages.map((msg, index) => {
+                        const isMe = String(msg.sender_id) === String(user.id);
+                        const prevMsg = messages[index - 1];
+                        const showDateHeader = index === 0 || new Date(msg.created_at).toDateString() !== new Date(prevMsg.created_at).toDateString();
+                        return (
+                            <div key={msg.id || index}>
+                                {showDateHeader && (
+                                    <div className="date-header">
+                                        <span>{new Date(msg.created_at).toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                                    </div>
+                                )}
+                                <div className={`message-row ${isMe ? 'my-message' : 'other-message'}`} onTouchStart={() => onTouchStart(msg)} onTouchEnd={onTouchEnd} onMouseDown={() => onTouchStart(msg)} onMouseUp={onTouchEnd}>
+                                    {!isMe && <img src={msg.sender_avatar} className="avatar-msg" alt="" />}
+                                    <div className="message-content">
+                                        {msg.sender_name && !isMe && <span className="sender-name">{msg.sender_name}</span>}
+                                        <div className="message-bubble-row">
+                                            {isMe && <span className="timestamp">{new Date(msg.created_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}</span>}
+                                            <div className="bubble" data-deleted={msg.is_deleted}>
+                                                {msg.type === 'image' && msg.file_url && <img src={msg.file_url} className="message-image" alt="sent" onClick={() => setModalFile(msg)} />}
+                                                {msg.type === 'video' && msg.file_url && <video src={msg.file_url} controls className="message-video" />}
+                                                {msg.type === 'audio' && msg.file_url && <audio src={msg.file_url} controls className="message-audio" />}
+                                                {msg.type === 'file' && msg.file_url && (
+                                                    <div className="file-attachment" onClick={() => handleFileDownload(msg.file_url, msg.file_name)}>
+                                                        <span className="file-icon">📄</span>
+                                                        <span className="file-name">{msg.file_name || 'ファイル'}</span>
+                                                    </div>
+                                                )}
+                                                {msg.content && <p className="message-text">{msg.content}</p>}
+                                            </div>
+                                            {!isMe && <span className="timestamp">{new Date(msg.created_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}</span>}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                    <div ref={messagesEndRef} />
+                </div>
+
+                <form className="input-area" onSubmit={handleSend}>
+                    <div className="input-actions-left">
+                        <label className="plus-btn-label">
+                            <span className="plus-icon">+</span>
+                            <input type="file" onChange={handleFileChange} style={{ display: 'none' }} />
+                        </label>
+                        <button type="button" className={`mic-btn ${isRecording ? 'recording' : ''}`} onClick={isRecording ? stopRecording : startRecording}>
+                            {isRecording ? '🛑' : '🎤'}
+                        </button>
+                    </div>
+                    {filePreview && (
+                        <div className="file-preview-bar">
+                            {filePreview.type === 'image' && <img src={filePreview.url} alt="" />}
+                            {filePreview.type === 'video' && <div className="preview-icon">🎥</div>}
+                            {filePreview.type === 'audio' && <div className="preview-icon">🎤</div>}
+                            {filePreview.type === 'file' && <div className="preview-icon">📄</div>}
+                            <span className="preview-name">{filePreview.name || '添付ファイル'}</span>
+                            <button type="button" className="close-preview" onClick={() => { setSelectedFile(null); setFilePreview(null); }}>✕</button>
+                        </div>
+                    )}
+                    <input type="text" value={input} onChange={(e) => setInput(e.target.value)} placeholder={isRecording ? "録音中..." : "メッセージを入力..."} readOnly={isRecording} />
+                    <button type="submit" className="send-btn" disabled={(!input.trim() && !selectedFile) || isRecording}>送信</button>
+                </form>
+            </div>
+
             {isGroupCreateMode && (
                 <div className="group-modal">
                     <div className="group-modal-content">
                         <div className="modal-tabs">
-                            <button
-                                className={modalMode === 'group' ? 'active' : ''}
-                                onClick={() => setModalMode('group')}
-                            >
-                                グループ作成
-                            </button>
-                            <button
-                                className={modalMode === 'contact' ? 'active' : ''}
-                                onClick={() => setModalMode('contact')}
-                            >
-                                友だち登録
-                            </button>
+                            <button className={modalMode === 'group' ? 'active' : ''} onClick={() => setModalMode('group')}>グループ作成</button>
+                            <button className={modalMode === 'contact' ? 'active' : ''} onClick={() => setModalMode('contact')}>友だち登録</button>
                         </div>
-
                         {modalMode === 'group' ? (
                             <>
                                 <h4>グループ作成</h4>
-                                <input
-                                    type="text"
-                                    placeholder="グループ名"
-                                    value={newGroupName}
-                                    onChange={e => setNewGroupName(e.target.value)}
-                                />
+                                <input type="text" placeholder="グループ名" value={newGroupName} onChange={e => setNewGroupName(e.target.value)} />
                                 <div className="member-selection">
                                     {users.filter(u => String(u.id) !== String(user.id)).map(u => (
                                         <label key={u.id} className="member-item">
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedUserIds.includes(u.id)}
-                                                onChange={(e) => {
-                                                    if (e.target.checked) setSelectedUserIds([...selectedUserIds, u.id]);
-                                                    else setSelectedUserIds(selectedUserIds.filter(id => id !== u.id));
-                                                }}
-                                            />
+                                            <input type="checkbox" checked={selectedUserIds.includes(u.id)} onChange={e => e.target.checked ? setSelectedUserIds([...selectedUserIds, u.id]) : setSelectedUserIds(selectedUserIds.filter(id => id !== u.id))} />
                                             <img src={u.avatar_url} alt="" className="avatar-small" />
                                             <span>{u.name}</span>
                                         </label>
@@ -838,13 +862,8 @@ const Chat = ({ user, setUser }) => {
                         ) : (
                             <>
                                 <h4>友だち登録</h4>
-                                <p className="modal-desc">招待したいGoogleアカウント（Gmail）を入力してください。承認されるとトークが可能になります。</p>
-                                <input
-                                    type="email"
-                                    placeholder="example@gmail.com"
-                                    value={inviteEmail}
-                                    onChange={e => setInviteEmail(e.target.value)}
-                                />
+                                <p className="modal-desc">招待したいGoogleアカウント（Gmail）を入力してください。</p>
+                                <input type="email" placeholder="example@gmail.com" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} />
                                 <div className="modal-actions">
                                     <button onClick={() => setIsGroupCreateMode(false)}>キャンセル</button>
                                     <button className="primary" onClick={handleInviteContact}>招待送信</button>
@@ -861,132 +880,18 @@ const Chat = ({ user, setUser }) => {
                         <h4>グループ編集</h4>
                         <form onSubmit={handleGroupUpdate}>
                             <div className="group-icon-edit">
-                                {groupEditAvatarPreview ? (
-                                    <img src={groupEditAvatarPreview} alt="" className="group-avatar-preview" />
-                                ) : (
-                                    <div className="group-avatar-preview group-icon">👥</div>
-                                )}
-                                <label className="avatar-input-label">
-                                    グループアイコンを変更
-                                    <input type="file" accept="image/*" onChange={handleGroupAvatarChange} style={{ display: 'none' }} />
-                                </label>
+                                {groupEditAvatarPreview ? <img src={groupEditAvatarPreview} alt="" className="group-avatar-preview" /> : <div className="group-avatar-preview group-icon">👥</div>}
+                                <label className="avatar-input-label">変更<input type="file" accept="image/*" onChange={handleGroupAvatarChange} style={{ display: 'none' }} /></label>
                             </div>
-                            <input
-                                type="text"
-                                placeholder="グループ名"
-                                value={groupEditName}
-                                onChange={e => setGroupEditName(e.target.value)}
-                                required
-                            />
+                            <input type="text" placeholder="グループ名" value={groupEditName} onChange={e => setGroupEditName(e.target.value)} required />
                             <div className="modal-actions">
                                 <button type="button" onClick={() => setIsGroupEditMode(false)}>キャンセル</button>
-                                <button type="submit" className="primary" disabled={isUpdatingGroup}>
-                                    {isUpdatingGroup ? '更新中...' : '保存'}
-                                </button>
+                                <button type="submit" className="primary" disabled={isUpdatingGroup}>{isUpdatingGroup ? '更新中...' : '保存'}</button>
                             </div>
                         </form>
                     </div>
                 </div>
             )}
-
-            <div className="messages-list" ref={messagesListRef} onScroll={handleScroll}>
-                {messages.map((msg, index) => {
-                    const isMe = String(msg.sender_id) === String(user.id);
-                    const prevMsg = messages[index - 1];
-                    const showDateHeader = index === 0 ||
-                        new Date(msg.created_at).toDateString() !== new Date(prevMsg.created_at).toDateString();
-
-                    return (
-                        <div key={msg.id || index}>
-                            {showDateHeader && (
-                                <div className="date-header">
-                                    <span>{new Date(msg.created_at).toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
-                                </div>
-                            )}
-                            <div
-                                className={`message-row ${isMe ? 'my-message' : 'other-message'}`}
-                                onTouchStart={() => onTouchStart(msg)}
-                                onTouchEnd={onTouchEnd}
-                                onMouseDown={() => onTouchStart(msg)}
-                                onMouseUp={onTouchEnd}
-                            >
-                                {!isMe && <img src={msg.sender_avatar} className="avatar-msg" alt="" />}
-                                <div className="message-content">
-                                    {msg.sender_name && !isMe && <span className="sender-name">{msg.sender_name}</span>}
-                                    <div className="message-bubble-row">
-                                        {isMe && <span className="timestamp">{new Date(msg.created_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}</span>}
-                                        <div className="bubble" data-deleted={msg.is_deleted}>
-                                            {msg.type === 'image' && msg.file_url && (
-                                                <img
-                                                    src={msg.file_url}
-                                                    className="message-image"
-                                                    alt="sent"
-                                                    onClick={() => setModalFile(msg)}
-                                                />
-                                            )}
-                                            {msg.type === 'video' && msg.file_url && (
-                                                <video src={msg.file_url} controls className="message-video" />
-                                            )}
-                                            {msg.type === 'audio' && msg.file_url && (
-                                                <audio src={msg.file_url} controls className="message-audio" />
-                                            )}
-                                            {msg.type === 'file' && msg.file_url && (
-                                                <div className="file-attachment" onClick={() => handleFileDownload(msg.file_url, msg.file_name)}>
-                                                    <span className="file-icon">📄</span>
-                                                    <span className="file-name">{msg.file_name || 'ファイル'}</span>
-                                                </div>
-                                            )}
-                                            {msg.content && <p className="message-text">{msg.content}</p>}
-                                        </div>
-                                        {!isMe && <span className="timestamp">{new Date(msg.created_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}</span>}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    );
-                })}
-                <div ref={messagesEndRef} />
-            </div>
-
-            <form className="input-area" onSubmit={handleSend}>
-                <div className="input-actions-left">
-                    <label className="plus-btn-label">
-                        <span className="plus-icon">+</span>
-                        <input
-                            type="file"
-                            onChange={handleFileChange}
-                            style={{ display: 'none' }}
-                        />
-                    </label>
-                    <button
-                        type="button"
-                        className={`mic-btn ${isRecording ? 'recording' : ''}`}
-                        onClick={isRecording ? stopRecording : startRecording}
-                    >
-                        {isRecording ? '🛑' : '🎤'}
-                    </button>
-                </div>
-
-                {filePreview && (
-                    <div className="file-preview-bar">
-                        {filePreview.type === 'image' && <img src={filePreview.url} alt="" />}
-                        {filePreview.type === 'video' && <div className="preview-icon">🎥</div>}
-                        {filePreview.type === 'audio' && <div className="preview-icon">🎤</div>}
-                        {filePreview.type === 'file' && <div className="preview-icon">📄</div>}
-                        <span className="preview-name">{filePreview.name || '添付ファイル'}</span>
-                        <button type="button" className="close-preview" onClick={() => { setSelectedFile(null); setFilePreview(null); }}>✕</button>
-                    </div>
-                )}
-
-                <input
-                    type="text"
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder={isRecording ? "録音中..." : "メッセージを入力..."}
-                    readOnly={isRecording}
-                />
-                <button type="submit" className="send-btn" disabled={(!input.trim() && !selectedFile) || isRecording}>送信</button>
-            </form>
 
             {modalFile && (
                 <div className="image-modal" onClick={() => setModalFile(null)}>
@@ -994,11 +899,8 @@ const Chat = ({ user, setUser }) => {
                     <div className="modal-content" onClick={e => e.stopPropagation()}>
                         <img src={modalFile.file_url} alt="full preview" />
                         <div className="modal-actions-bar">
-                            <button className="save-btn" onClick={() => handleFileDownload(modalFile.file_url, modalFile.file_name || 'image.jpg')}>
-                                💾 保存 / 共有
-                            </button>
+                            <button className="save-btn" onClick={() => handleFileDownload(modalFile.file_url, modalFile.file_name || 'image.jpg')}>💾 保存 / 共有</button>
                         </div>
-                        <p className="modal-hint">※ 保存できない場合は画像を長押ししてください</p>
                     </div>
                 </div>
             )}
@@ -1018,7 +920,6 @@ const Chat = ({ user, setUser }) => {
                                 localStorage.setItem('push_prompted', 'true');
                             }}>有効にする</button>
                         </div>
-                        <p className="ios-hint">※ iOSの方はホーム画面に追加してから有効にしてください</p>
                     </div>
                 </div>
             )}

@@ -1,5 +1,6 @@
 <?php
 require_once 'config.php';
+require_once 'push_helper.php';
 enableCors();
 
 $method = $_SERVER['REQUEST_METHOD'];
@@ -74,6 +75,7 @@ if ($method === 'POST') {
         $stmt->execute([$userId]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
+        broadcastEvent('user_updated', $user);
         jsonResponse(['success' => true, 'user' => $user]);
     } catch (Exception $e) {
         jsonResponse(['error' => $e->getMessage()], 500);

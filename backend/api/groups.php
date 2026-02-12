@@ -1,5 +1,6 @@
 <?php
 require_once 'config.php';
+require_once 'push_helper.php';
 enableCors();
 
 $method = $_SERVER['REQUEST_METHOD'];
@@ -75,6 +76,7 @@ if ($method === 'POST') {
 			$stmt = $pdo->prepare("SELECT * FROM chat_groups WHERE id = ?");
 			$stmt->execute([$groupId]);
 			$group = $stmt->fetch(PDO::FETCH_ASSOC);
+			broadcastEvent('group_updated', $group);
 			jsonResponse(['success' => true, 'group' => $group]);
 		} catch (Exception $e) {
 			jsonResponse(['error' => $e->getMessage()], 500);
@@ -104,6 +106,7 @@ if ($method === 'POST') {
 		$stmt->execute([$groupId]);
 		$group = $stmt->fetch(PDO::FETCH_ASSOC);
 
+		broadcastEvent('group_updated', $group);
 		jsonResponse(['success' => true, 'group' => $group]);
 	} catch (Exception $e) {
 		$pdo->rollBack();

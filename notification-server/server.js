@@ -39,13 +39,18 @@ app.post('/broadcast', async (req, res) => {
   }
 
   // 1. WebSocket Broadcast
-  io.emit('chat_message', message);
-  console.log('Broadcasted message via Socket.io');
+  if (message.event_type) {
+    io.emit(message.event_type, message.data || message);
+    console.log(`Broadcasted event ${message.event_type} via Socket.io`);
+  } else {
+    io.emit('chat_message', message);
+    console.log('Broadcasted message via Socket.io');
+  }
 
   // 2. Web Push Notifications
   if (subscriptions && Array.isArray(subscriptions) && subscriptions.length > 0) {
     console.log(`Sending push to ${subscriptions.length} subscribers`);
-    
+
     const notificationPayload = JSON.stringify({
       title: 'New Message',
       body: message.type === 'image' ? 'Sent an image' : message.content,
@@ -60,15 +65,15 @@ app.post('/broadcast', async (req, res) => {
       // sub should contain endpoint and keys, standard Web Push subscription object
       return webpush.sendNotification(sub, notificationPayload)
         .catch(err => {
-            if (err.statusCode === 410 || err.statusCode === 404) {
-                // Subscription is invalid, should ideally remove from DB
-                console.log(`Subscription invalid: ${sub.endpoint}`);
-            } else {
-                console.error('Push error:', err);
-            }
+          if (err.statusCode === 410 || err.statusCode === 404) {
+            // Subscription is invalid, should ideally remove from DB
+            console.log(`Subscription invalid: ${sub.endpoint}`);
+          } else {
+            console.error('Push error:', err);
+          }
         });
     })).then(results => {
-        console.log('Push notifications processed');
+      console.log('Push notifications processed');
     });
   }
 
