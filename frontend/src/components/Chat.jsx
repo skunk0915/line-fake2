@@ -15,7 +15,7 @@ import './Chat.css';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3000';
 
-const Chat = ({ user }) => {
+const Chat = ({ user, setUser }) => {
     const [messages, setMessages] = useState([]);
     const [users, setUsers] = useState([]);
     const [groups, setGroups] = useState([]);
@@ -44,6 +44,20 @@ const Chat = ({ user }) => {
     });
     const [isRecording, setIsRecording] = useState(false);
     const [manualScroll, setManualScroll] = useState(false);
+
+    // Profile Edit State
+    const [profileName, setProfileName] = useState(user.name);
+    const [profileAvatarFile, setProfileAvatarFile] = useState(null);
+    const [profileAvatarPreview, setProfileAvatarPreview] = useState(user.avatar_url);
+    const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
+
+    // Group Edit State
+    const [isGroupEditMode, setIsGroupEditMode] = useState(false);
+    const [editingGroup, setEditingGroup] = useState(null);
+    const [groupEditName, setGroupEditName] = useState('');
+    const [groupEditAvatarFile, setGroupEditAvatarFile] = useState(null);
+    const [groupEditAvatarPreview, setGroupEditAvatarPreview] = useState('');
+    const [isUpdatingGroup, setIsUpdatingGroup] = useState(false);
 
     const socketRef = useRef();
     const messagesEndRef = useRef(null);
@@ -495,6 +509,97 @@ const Chat = ({ user }) => {
         setShowHamburgerMenu(false);
     };
 
+    const handleProfileUpdate = async (e) => {
+        e.preventDefault();
+        setIsUpdatingProfile(true);
+        const formData = new FormData();
+        formData.append('user_id', user.id);
+        formData.append('name', profileName);
+        if (profileAvatarFile) {
+            formData.append('avatar', profileAvatarFile);
+        }
+
+        try {
+            const res = await axios.post(`${API_URL}/users.php`, formData);
+            if (res.data.success) {
+                const updatedUser = res.data.user;
+                setUser(updatedUser);
+                localStorage.setItem('chat_user', JSON.stringify(updatedUser));
+                setProfileAvatarFile(null);
+                alert('プロフィールを更新しました');
+            }
+        } catch (err) {
+            console.error('Profile update error:', err);
+            alert('プロフィールの更新に失敗しました');
+        } finally {
+            setIsUpdatingProfile(false);
+        }
+    };
+
+    const handleProfileAvatarChange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setProfileAvatarFile(file);
+        const reader = new FileReader();
+        reader.onloadend = () => setProfileAvatarPreview(reader.result);
+        reader.readAsDataURL(file);
+    };
+
+    const handleGroupUpdate = async (e) => {
+        e.preventDefault();
+        if (!groupEditName.trim()) return;
+        setIsUpdatingGroup(true);
+        const formData = new FormData();
+        formData.append('group_id', editingGroup.id);
+        formData.append('name', groupEditName);
+        if (groupEditAvatarFile) {
+            formData.append('avatar', groupEditAvatarFile);
+        }
+
+        try {
+            const res = await axios.post(`${API_URL}/groups.php`, formData);
+            if (res.data.success) {
+                fetchGroups();
+                setIsGroupEditMode(false);
+                setEditingGroup(null);
+                setGroupEditAvatarFile(null);
+                alert('グループ情報を更新しました');
+            }
+        } catch (err) {
+            console.error('Group update error:', err);
+            alert('グループ情報の更新に失敗しました');
+        } finally {
+            setIsUpdatingGroup(false);
+        }
+    };
+
+    const handleGroupAvatarChange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setGroupEditAvatarFile(file);
+        const reader = new FileReader();
+        reader.onloadend = () => setGroupEditAvatarPreview(reader.result);
+        reader.readAsDataURL(file);
+    };
+
+    const onGroupLongPress = (g) => {
+        setEditingGroup(g);
+        setGroupEditName(g.name);
+        setGroupEditAvatarPreview(g.avatar_url || '');
+        setGroupEditAvatarFile(null);
+        setIsGroupEditMode(true);
+    };
+
+    const groupLongPressTimer = useRef(null);
+
+    const onGroupTouchStart = (g) => {
+        groupLongPressTimer.current = setTimeout(() => onGroupLongPress(g), 800);
+    };
+
+    const onGroupTouchEnd = () => {
+        if (groupLongPressTimer.current) clearTimeout(groupLongPressTimer.current);
+    };
+
     const handleFileDownload = async (url, fileName) => {
         // Desktop check - skip share API on desktop windows to avoid confusing sharing menus
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -562,9 +667,17 @@ const Chat = ({ user }) => {
                             key={`g-${g.id}`}
                             className={`user-item ${recipientType === 'group' && String(recipientId) === String(g.id) ? 'active' : ''}`}
                             onClick={() => { setRecipientId(g.id); setRecipientType('group'); setManualScroll(false); }}
+                            onMouseDown={() => onGroupTouchStart(g)}
+                            onMouseUp={onGroupTouchEnd}
+                            onTouchStart={() => onGroupTouchStart(g)}
+                            onTouchEnd={onGroupTouchEnd}
                         >
-                            <div className="user-avatar group-icon">
-                                👥
+                            <div className="user-avatar-container">
+                                {g.avatar_url ? (
+                                    <img src={g.avatar_url} alt="" className="user-avatar" />
+                                ) : (
+                                    <div className="user-avatar group-icon">👥</div>
+                                )}
                                 {g.unread_count > 0 && (recipientType !== 'group' || String(recipientId) !== String(g.id)) && <span className="unread-badge">{g.unread_count}</span>}
                             </div>
                             <span className="user-name-label">{g.name}</span>
@@ -595,6 +708,33 @@ const Chat = ({ user }) => {
                 <div className="menu-overlay" onClick={() => setShowHamburgerMenu(false)}>
                     <div className="hamburger-menu" onClick={e => e.stopPropagation()}>
                         <div className="menu-header">設定</div>
+
+                        <div className="menu-item-group">
+                            <label>プロフィール編集</label>
+                            <div className="profile-edit-section">
+                                <form onSubmit={handleProfileUpdate} className="profile-edit-form">
+                                    <div className="avatar-edit-container">
+                                        <img src={profileAvatarPreview || '/default-avatar.png'} alt="Preview" className="avatar-preview-large" />
+                                        <label className="avatar-input-label">
+                                            写真を変更
+                                            <input type="file" accept="image/*" onChange={handleProfileAvatarChange} style={{ display: 'none' }} />
+                                        </label>
+                                    </div>
+                                    <div className="name-input-group">
+                                        <input
+                                            type="text"
+                                            value={profileName}
+                                            onChange={e => setProfileName(e.target.value)}
+                                            placeholder="お名前"
+                                            required
+                                        />
+                                    </div>
+                                    <button type="submit" className="profile-save-btn" disabled={isUpdatingProfile}>
+                                        {isUpdatingProfile ? '更新中...' : '保存'}
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
 
                         <div className="menu-item-group">
                             <label>通知設定</label>
@@ -711,6 +851,40 @@ const Chat = ({ user }) => {
                                 </div>
                             </>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {isGroupEditMode && editingGroup && (
+                <div className="group-modal">
+                    <div className="group-modal-content">
+                        <h4>グループ編集</h4>
+                        <form onSubmit={handleGroupUpdate}>
+                            <div className="group-icon-edit">
+                                {groupEditAvatarPreview ? (
+                                    <img src={groupEditAvatarPreview} alt="" className="group-avatar-preview" />
+                                ) : (
+                                    <div className="group-avatar-preview group-icon">👥</div>
+                                )}
+                                <label className="avatar-input-label">
+                                    グループアイコンを変更
+                                    <input type="file" accept="image/*" onChange={handleGroupAvatarChange} style={{ display: 'none' }} />
+                                </label>
+                            </div>
+                            <input
+                                type="text"
+                                placeholder="グループ名"
+                                value={groupEditName}
+                                onChange={e => setGroupEditName(e.target.value)}
+                                required
+                            />
+                            <div className="modal-actions">
+                                <button type="button" onClick={() => setIsGroupEditMode(false)}>キャンセル</button>
+                                <button type="submit" className="primary" disabled={isUpdatingGroup}>
+                                    {isUpdatingGroup ? '更新中...' : '保存'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}

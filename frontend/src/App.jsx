@@ -17,7 +17,7 @@ function App() {
   return (
     <div className="app-container">
       {user ? (
-        <Chat user={user} />
+        <Chat user={user} setUser={setUser} />
       ) : (
         <Login onLogin={handleLogin} />
       )}
