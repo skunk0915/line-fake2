@@ -460,54 +460,56 @@ const Chat = ({ user }) => {
             </div>
 
             {showHamburgerMenu && (
-                <div className="hamburger-menu">
-                    <div className="menu-header">設定</div>
+                <div className="menu-overlay" onClick={() => setShowHamburgerMenu(false)}>
+                    <div className="hamburger-menu" onClick={e => e.stopPropagation()}>
+                        <div className="menu-header">設定</div>
 
-                    <div className="menu-item-group">
-                        <label>通知設定</label>
-                        <div className="notification-settings">
-                            {pushStatus === 'unsupported' && (
-                                <p className="status-msg warning">このブラウザは通知に対応していません</p>
-                            )}
-                            {pushStatus === 'denied' && (
-                                <p className="status-msg error">通知がブロックされています。設定から許可してください。</p>
-                            )}
-                            {pushStatus === 'subscribed' && (
-                                <p className="status-msg success">✅ 通知は有効です</p>
-                            )}
-                            {(pushStatus === 'prompt' || pushStatus === 'denied' || pushStatus === 'subscribed') && (
-                                <div className="notification-actions">
-                                    <button
-                                        className={`push-btn ${pushStatus === 'subscribed' ? 'active' : ''}`}
-                                        onClick={async (e) => {
-                                            e.stopPropagation();
-                                            const result = await subscribePush(user.id);
-                                            if (result.success) setPushStatus('subscribed');
-                                            else if (result.reason === 'denied') setPushStatus('denied');
-                                            else alert('通知の設定に失敗しました: ' + (result.reason || 'unknown'));
-                                        }}
-                                    >
-                                        {pushStatus === 'subscribed' ? '通知設定を更新' : '通知を有効にする'}
-                                    </button>
-                                    <p className="ios-hint">※ iOSでは「ホーム画面に追加」してから設定してください</p>
-                                </div>
-                            )}
+                        <div className="menu-item-group">
+                            <label>通知設定</label>
+                            <div className="notification-settings">
+                                {pushStatus === 'unsupported' && (
+                                    <p className="status-msg warning">このブラウザは通知に対応していません</p>
+                                )}
+                                {pushStatus === 'denied' && (
+                                    <p className="status-msg error">通知がブロックされています。設定から許可してください。</p>
+                                )}
+                                {pushStatus === 'subscribed' && (
+                                    <p className="status-msg success">✅ 通知は有効です</p>
+                                )}
+                                {(pushStatus === 'prompt' || pushStatus === 'denied' || pushStatus === 'subscribed') && (
+                                    <div className="notification-actions">
+                                        <button
+                                            className={`push-btn ${pushStatus === 'subscribed' ? 'active' : ''}`}
+                                            onClick={async (e) => {
+                                                e.stopPropagation();
+                                                const result = await subscribePush(user.id);
+                                                if (result.success) setPushStatus('subscribed');
+                                                else if (result.reason === 'denied') setPushStatus('denied');
+                                                else alert('通知の設定に失敗しました: ' + (result.reason || 'unknown'));
+                                            }}
+                                        >
+                                            {pushStatus === 'subscribed' ? '通知設定を更新' : '通知を有効にする'}
+                                        </button>
+                                        <p className="ios-hint">※ iOSでは「ホーム画面に追加」してから設定してください</p>
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
 
-                    <div className="menu-item-group">
-                        <label>テーマ変更</label>
-                        <div className="theme-grid">
-                            {themes.map(t => (
-                                <div
-                                    key={t.id}
-                                    className={`theme-option ${currentTheme === t.id ? 'active' : ''}`}
-                                    onClick={() => toggleTheme(t.id)}
-                                >
-                                    <div className="theme-preview" style={{ background: t.background }}></div>
-                                    <span>{t.name}</span>
-                                </div>
-                            ))}
+                        <div className="menu-item-group">
+                            <label>テーマ変更</label>
+                            <div className="theme-grid">
+                                {themes.map(t => (
+                                    <div
+                                        key={t.id}
+                                        className={`theme-option ${currentTheme === t.id ? 'active' : ''}`}
+                                        onClick={() => toggleTheme(t.id)}
+                                    >
+                                        <div className="theme-preview" style={{ background: t.background }}></div>
+                                        <span>{t.name}</span>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
                 </div>
