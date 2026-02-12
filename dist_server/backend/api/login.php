@@ -47,10 +47,29 @@ $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$user) {
     // Register new user
-    $insert = $pdo->prepare("INSERT INTO users (google_id, name, avatar_url) VALUES (?, ?, ?)");
-    $insert->execute([$googleId, $name, $picture]);
+    $insert = $pdo->prepare("INSERT INTO users (google_id, email, name, avatar_url) VALUES (?, ?, ?, ?)");
+    $insert->execute([$googleId, $email, $name, $picture]);
     $userId = $pdo->lastInsertId();
-    $user = ['id' => $userId, 'name' => $name, 'avatar_url' => $picture];
+    $user = ['id' => $userId, 'name' => $name, 'avatar_url' => $picture, 'email' => $email];
+} else if (empty($user['email'])) {
+    // Update missing email
+    $update = $pdo->prepare("UPDATE users SET email = ? WHERE id = ?");
+    $update->execute([$email, $user['id']]);
+    $user['email'] = $email;
+}
+
+// Check for invitations
+if ($user) {
+    // Establish contacts for any accepted invitations
+    $stmtInv = $pdo->prepare("SELECT sender_id FROM invitations WHERE email = ? AND status = 'accepted'");
+    $stmtInv->execute([$email]);
+    while ($inv = $stmtInv->fetch(PDO::FETCH_ASSOC)) {
+        $senderId = $inv['sender_id'];
+        $recipientId = $user['id'];
+
+        $pdo->prepare("INSERT IGNORE INTO contacts (user_id, contact_id) VALUES (?, ?), (?, ?)")
+            ->execute([$senderId, $recipientId, $recipientId, $senderId]);
+    }
 }
 
 // In a real app, generate a session token here. Returning user ID directly for simplicity.

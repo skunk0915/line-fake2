@@ -30,10 +30,12 @@ const Chat = ({ user }) => {
     const [recipientId, setRecipientId] = useState(null);
     const [recipientType, setRecipientType] = useState('user'); // 'user', 'group'
 
-    // Group Creation State
+    // Group/Contact Creation State
     const [isGroupCreateMode, setIsGroupCreateMode] = useState(false);
     const [selectedUserIds, setSelectedUserIds] = useState([]);
     const [newGroupName, setNewGroupName] = useState('');
+    const [modalMode, setModalMode] = useState('group'); // 'group', 'contact'
+    const [inviteEmail, setInviteEmail] = useState('');
 
     // UI States
     const [showHamburgerMenu, setShowHamburgerMenu] = useState(false);
@@ -67,13 +69,16 @@ const Chat = ({ user }) => {
                     if (firstOther) {
                         setRecipientId(firstOther.id);
                         setRecipientType('user');
+                    } else {
+                        // If no other users found (e.g. only me), maybe select nothing or self?
+                        // For now keep null
                     }
                 }
             }
         } catch (err) {
             console.error('Fetch users error:', err);
         }
-    }, []);
+    }, [user.id, recipientId]);
 
     // Fetch groups
     const fetchGroups = useCallback(async () => {
@@ -159,8 +164,34 @@ const Chat = ({ user }) => {
     }, [fetchMessages, user, recipientId, recipientType]);
 
     useEffect(() => {
-        // Handle deep link from notification
+        // Handle deep link (notifications & invitations)
         const params = new URLSearchParams(window.location.search);
+
+        // 1. Check for invitation
+        const invToken = params.get('invitation_token');
+        if (invToken && user) {
+            axios.post(`${API_URL}/claim_invite.php`, {
+                user_id: user.id,
+                token: invToken
+            })
+                .then(res => {
+                    if (res.data.success) {
+                        alert('招待を受け取りました！友だちリストに追加されました。');
+                        fetchUsers(); // Refresh list to see the new friend
+                    } else {
+                        console.warn(res.data.message);
+                    }
+                })
+                .catch(err => console.error('Claim invite error:', err))
+                .finally(() => {
+                    // Clear URL param
+                    const url = new URL(window.location);
+                    url.searchParams.delete('invitation_token');
+                    window.history.replaceState({}, '', url);
+                });
+        }
+
+        // 2. Check for chat link
         const chatWith = params.get('chat_with');
         const type = params.get('type') || 'user';
         if (chatWith !== null) {
@@ -168,9 +199,12 @@ const Chat = ({ user }) => {
             setRecipientType(chatWith === '0' ? 'global' : type);
             setManualScroll(false); // Reset scroll position when opening from notification
             // Clean up URL
-            window.history.replaceState({}, '', window.location.pathname);
+            const url = new URL(window.location);
+            url.searchParams.delete('chat_with');
+            url.searchParams.delete('type');
+            window.history.replaceState({}, '', url);
         }
-    }, []);
+    }, [user, fetchUsers]);
 
     useEffect(() => {
         const initPush = async () => {
@@ -405,6 +439,27 @@ const Chat = ({ user }) => {
         }
     };
 
+    const handleInviteContact = async () => {
+        if (!inviteEmail.trim() || !inviteEmail.includes('@')) {
+            alert('有効なメールアドレスを入力してください');
+            return;
+        }
+        try {
+            const res = await axios.post(`${API_URL}/invitations.php`, {
+                sender_id: user.id,
+                email: inviteEmail
+            });
+            if (res.data.success) {
+                alert('招待メールを送信しました！相手が承認するとトークルームが成立します。');
+                setInviteEmail('');
+                setIsGroupCreateMode(false);
+            }
+        } catch (err) {
+            console.error('Invite error:', err);
+            alert('招待に失敗しました: ' + (err.response?.data?.error || err.message));
+        }
+    };
+
     const toggleTheme = (themeId) => {
         setCurrentTheme(themeId);
         localStorage.setItem('chat_theme', themeId);
@@ -539,33 +594,67 @@ const Chat = ({ user }) => {
             {isGroupCreateMode && (
                 <div className="group-modal">
                     <div className="group-modal-content">
-                        <h4>グループ作成</h4>
-                        <input
-                            type="text"
-                            placeholder="グループ名"
-                            value={newGroupName}
-                            onChange={e => setNewGroupName(e.target.value)}
-                        />
-                        <div className="member-selection">
-                            {users.filter(u => String(u.id) !== String(user.id)).map(u => (
-                                <label key={u.id} className="member-item">
-                                    <input
-                                        type="checkbox"
-                                        checked={selectedUserIds.includes(u.id)}
-                                        onChange={(e) => {
-                                            if (e.target.checked) setSelectedUserIds([...selectedUserIds, u.id]);
-                                            else setSelectedUserIds(selectedUserIds.filter(id => id !== u.id));
-                                        }}
-                                    />
-                                    <img src={u.avatar_url} alt="" className="avatar-small" />
-                                    <span>{u.name}</span>
-                                </label>
-                            ))}
+                        <div className="modal-tabs">
+                            <button
+                                className={modalMode === 'group' ? 'active' : ''}
+                                onClick={() => setModalMode('group')}
+                            >
+                                グループ作成
+                            </button>
+                            <button
+                                className={modalMode === 'contact' ? 'active' : ''}
+                                onClick={() => setModalMode('contact')}
+                            >
+                                友だち登録
+                            </button>
                         </div>
-                        <div className="modal-actions">
-                            <button onClick={() => setIsGroupCreateMode(false)}>キャンセル</button>
-                            <button className="primary" onClick={handleCreateGroup}>作成</button>
-                        </div>
+
+                        {modalMode === 'group' ? (
+                            <>
+                                <h4>グループ作成</h4>
+                                <input
+                                    type="text"
+                                    placeholder="グループ名"
+                                    value={newGroupName}
+                                    onChange={e => setNewGroupName(e.target.value)}
+                                />
+                                <div className="member-selection">
+                                    {users.filter(u => String(u.id) !== String(user.id)).map(u => (
+                                        <label key={u.id} className="member-item">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedUserIds.includes(u.id)}
+                                                onChange={(e) => {
+                                                    if (e.target.checked) setSelectedUserIds([...selectedUserIds, u.id]);
+                                                    else setSelectedUserIds(selectedUserIds.filter(id => id !== u.id));
+                                                }}
+                                            />
+                                            <img src={u.avatar_url} alt="" className="avatar-small" />
+                                            <span>{u.name}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                                <div className="modal-actions">
+                                    <button onClick={() => setIsGroupCreateMode(false)}>キャンセル</button>
+                                    <button className="primary" onClick={handleCreateGroup}>作成</button>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                <h4>友だち登録</h4>
+                                <p className="modal-desc">招待したいGoogleアカウント（Gmail）を入力してください。承認されるとトークが可能になります。</p>
+                                <input
+                                    type="email"
+                                    placeholder="example@gmail.com"
+                                    value={inviteEmail}
+                                    onChange={e => setInviteEmail(e.target.value)}
+                                />
+                                <div className="modal-actions">
+                                    <button onClick={() => setIsGroupCreateMode(false)}>キャンセル</button>
+                                    <button className="primary" onClick={handleInviteContact}>招待送信</button>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
             )}
