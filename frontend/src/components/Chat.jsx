@@ -667,7 +667,7 @@ const Chat = ({ user, setUser }) => {
     };
 
     return (
-        <div className="chat-container" style={{ background: activeTheme.background }}>
+        <div className={`chat-container ${showHamburgerMenu ? 'menu-active' : ''}`} style={{ background: activeTheme.background }}>
             <div className="selector-wrapper">
                 <div className="user-selector">
                     {groups.map(g => (
@@ -793,15 +793,6 @@ const Chat = ({ user, setUser }) => {
             )}
 
             <div className={`main-chat ${showHamburgerMenu ? 'menu-open' : ''}`}>
-                <div className="chat-header">
-                    <span className="recipient-name">
-                        {recipientType === 'global' ? 'Global Chat' : (
-                            recipientType === 'group' ? (groups.find(g => String(g.id) === String(recipientId))?.name || 'Group Chat') : (users.find(u => String(u.id) === String(recipientId))?.name || 'Chat')
-                        )}
-                    </span>
-                    {isLoadingMessages && <div className="loading-dots"><span>.</span><span>.</span><span>.</span></div>}
-                </div>
-
                 <div className="messages-list" ref={messagesListRef} onScroll={handleScroll}>
                     {messages.length === 0 && !isLoadingMessages && (
                         <div className="empty-chat">
