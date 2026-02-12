@@ -131,6 +131,39 @@ const Chat = ({ user, setUser }) => {
         }
     }, [user, recipientId, recipientType]);
 
+    const markRead = useCallback(async () => {
+        if (!user?.id || !recipientId || recipientType === 'global') return;
+        try {
+            const formData = new FormData();
+            formData.append('sender_id', user.id);
+            formData.append('recipient_id', recipientId);
+            formData.append('recipient_type', recipientType);
+            await axios.post(`${API_URL}/messages.php?action=mark_read`, formData);
+            // Refresh counts to update badges in the list
+            const resU = await axios.get(`${API_URL}/users.php`, { params: { my_id: user.id } });
+            if (resU.data?.users) setUsers(resU.data.users);
+            const resG = await axios.get(`${API_URL}/groups.php`, { params: { user_id: user.id } });
+            if (resG.data?.groups) setGroups(resG.data.groups);
+        } catch (err) {
+            console.error('Mark read error:', err);
+        }
+    }, [user.id, recipientId, recipientType]);
+
+    // Intersection Observer to detect when user sees the bottom of the chat
+    useEffect(() => {
+        if (!messagesEndRef.current || !recipientId) return;
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) {
+                    markRead();
+                }
+            },
+            { threshold: 0.1 }
+        );
+        observer.observe(messagesEndRef.current);
+        return () => observer.disconnect();
+    }, [markRead, messages.length, recipientId]);
+
     // Connect / reconnect socket
     const connectSocket = useCallback(() => {
         if (socketRef.current?.connected) return;
@@ -641,7 +674,14 @@ const Chat = ({ user, setUser }) => {
                         <div
                             key={`g-${g.id}`}
                             className={`user-item ${recipientType === 'group' && String(recipientId) === String(g.id) ? 'active' : ''}`}
-                            onClick={() => { setRecipientId(g.id); setRecipientType('group'); setManualScroll(false); }}
+                            onClick={() => {
+                                if (String(recipientId) !== String(g.id) || recipientType !== 'group') {
+                                    setMessages([]);
+                                    setRecipientId(g.id);
+                                    setRecipientType('group');
+                                    setManualScroll(false);
+                                }
+                            }}
                             onMouseDown={() => onGroupTouchStart(g)}
                             onMouseUp={onGroupTouchEnd}
                             onTouchStart={() => onGroupTouchStart(g)}
@@ -663,7 +703,14 @@ const Chat = ({ user, setUser }) => {
                         <div
                             key={u.id}
                             className={`user-item ${recipientType === 'user' && String(recipientId) === String(u.id) ? 'active' : ''}`}
-                            onClick={() => { setRecipientId(u.id); setRecipientType('user'); setManualScroll(false); }}
+                            onClick={() => {
+                                if (String(recipientId) !== String(u.id) || recipientType !== 'user') {
+                                    setMessages([]);
+                                    setRecipientId(u.id);
+                                    setRecipientType('user');
+                                    setManualScroll(false);
+                                }
+                            }}
                         >
                             <div className="user-avatar-container">
                                 <img src={u.avatar_url} alt="" className="user-avatar" />

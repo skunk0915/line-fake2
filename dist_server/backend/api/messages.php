@@ -22,12 +22,6 @@ if ($method === 'GET') {
                 LIMIT 100";
         $stmt = $pdo->query($sql);
     } elseif ($recipientType === 'group') {
-        // Mark as read for groups
-        if ($senderId) {
-            $upd = $pdo->prepare("UPDATE chat_group_members SET last_read_at = CURRENT_TIMESTAMP WHERE group_id = ? AND user_id = ?");
-            $upd->execute([$recipientId, $senderId]);
-        }
-
         $sql = "SELECT m.*, u.name as sender_name, u.avatar_url as sender_avatar 
                 FROM messages m
                 JOIN users u ON m.sender_id = u.id
@@ -38,12 +32,6 @@ if ($method === 'GET') {
         $stmt->execute([$recipientId]);
     } else {
         // 1-on-1
-        // Mark as read (messages sent by the OTHER person to ME)
-        if ($senderId && $recipientId) {
-            $upd = $pdo->prepare("UPDATE messages SET is_read = TRUE WHERE sender_id = ? AND recipient_id = ? AND recipient_type = 'user'");
-            $upd->execute([$recipientId, $senderId]);
-        }
-
         $sql = "SELECT m.*, u.name as sender_name, u.avatar_url as sender_avatar 
                 FROM messages m
                 JOIN users u ON m.sender_id = u.id
@@ -77,7 +65,7 @@ if ($method === 'GET') {
     jsonResponse(['messages' => $messages]);
 }
 
-if ($method === 'POST') {
+if ($method === 'POST' && !isset($_GET['action'])) {
     $senderId = $_POST['sender_id'] ?? null;
     $recipientId = $_POST['recipient_id'] ?? 0;
     $recipientType = $_POST['recipient_type'] ?? 'user';
@@ -192,6 +180,28 @@ if ($method === 'POST') {
     }
 
     jsonResponse(['success' => true, 'message' => $newMessage]);
+}
+
+if ($method === 'POST' && isset($_GET['action']) && $_GET['action'] === 'mark_read') {
+    $senderId = $_POST['sender_id'] ?? null;
+    $recipientId = $_POST['recipient_id'] ?? 0;
+    $recipientType = $_POST['recipient_type'] ?? 'user';
+
+    if (!$senderId || !$recipientId) {
+        jsonResponse(['error' => 'Missing sender_id or recipient_id'], 400);
+    }
+
+    $pdo = getDbConnection();
+    if ($recipientType === 'group') {
+        $upd = $pdo->prepare("UPDATE chat_group_members SET last_read_at = CURRENT_TIMESTAMP WHERE group_id = ? AND user_id = ?");
+        $upd->execute([$recipientId, $senderId]);
+    } else {
+        // Mark as read (messages sent by the OTHER person to ME)
+        $upd = $pdo->prepare("UPDATE messages SET is_read = TRUE WHERE sender_id = ? AND recipient_id = ? AND recipient_type = 'user'");
+        $upd->execute([$recipientId, $senderId]);
+    }
+
+    jsonResponse(['success' => true]);
 }
 
 if ($method === 'DELETE' || ($method === 'POST' && isset($_GET['action']) && $_GET['action'] === 'delete')) {
