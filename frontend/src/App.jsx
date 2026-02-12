@@ -14,18 +14,10 @@ function App() {
     localStorage.setItem('chat_user', JSON.stringify(userData));
   };
 
-  const handleLogout = () => {
-    setUser(null);
-    localStorage.removeItem('chat_user');
-  };
-
   return (
     <div className="app-container">
       {user ? (
-        <>
-          <button onClick={handleLogout} className="logout-btn">Logout</button>
-          <Chat user={user} />
-        </>
+        <Chat user={user} />
       ) : (
         <Login onLogin={handleLogin} />
       )}

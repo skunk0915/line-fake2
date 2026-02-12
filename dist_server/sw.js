@@ -1,5 +1,5 @@
 // Service Worker for Push Notifications and Offline Support
-const CACHE_NAME = 'chat-cache-v3';
+const CACHE_NAME = 'chat-cache-v4';
 
 // Install event - activate immediately
 self.addEventListener('install', (event) => {

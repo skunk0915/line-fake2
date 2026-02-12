@@ -28,12 +28,21 @@ function sendPushNotifications($message, $senderId)
 
         // Determine who to notify
         $recipientId = (int)($message['recipient_id'] ?? 0);
+        $recipientType = $message['recipient_type'] ?? 'user';
         $senderIdInt = (int)$senderId;
 
-        if ($recipientId === 0) {
+        if ($recipientType === 'global') {
             // Global chat: notify everyone except sender
             $stmt = $pdo->prepare("SELECT * FROM push_subscriptions WHERE user_id != ?");
             $stmt->execute([$senderIdInt]);
+            $url = '/line-fake2/?chat_with=0';
+        } elseif ($recipientType === 'group') {
+            // Group chat: notify all members except sender
+            $stmt = $pdo->prepare("SELECT ps.* FROM push_subscriptions ps 
+                                   JOIN chat_group_members cgm ON ps.user_id = cgm.user_id 
+                                   WHERE cgm.group_id = ? AND ps.user_id != ?");
+            $stmt->execute([$recipientId, $senderIdInt]);
+            $url = "/line-fake2/?chat_with={$recipientId}&type=group";
         } else {
             // 1-on-1 chat: notify only the recipient
             if ($recipientId === $senderIdInt) {
@@ -41,11 +50,12 @@ function sendPushNotifications($message, $senderId)
             }
             $stmt = $pdo->prepare("SELECT * FROM push_subscriptions WHERE user_id = ?");
             $stmt->execute([$recipientId]);
+            $url = "/line-fake2/?chat_with={$senderIdInt}";
         }
         $subscriptions = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         if (empty($subscriptions)) {
-            return ['sent' => 0, 'message' => 'No subscribers found for user ' . $recipientId];
+            return ['sent' => 0, 'message' => 'No subscribers found'];
         }
 
         // Set up WebPush
@@ -60,15 +70,16 @@ function sendPushNotifications($message, $senderId)
         $webPush = new WebPush($auth, [], 30); // 30 second timeout
 
         // Prepare notification payload
-        $body = ($message['type'] === 'image') ? '画像を送信しました' : ($message['content'] ?? '');
+        $body = ($message['type'] === 'image') ? '画像を送信しました' : (($message['type'] === 'video') ? '動画を送信しました' : (($message['type'] === 'audio') ? 'ボイスメッセージを送信しました' : (($message['type'] === 'file') ? 'ファイルを送信しました' : ($message['content'] ?? ''))));
+
         $senderName = $message['sender_name'] ?? 'Someone';
 
         $payload = json_encode([
             'title' => $senderName,
             'body' => $body,
-            'icon' => '/line-fake2/favicon/icon-192.png',
-            'badge' => '/line-fake2/favicon/icon-192.png',
-            'data' => ['url' => '/line-fake2/']
+            'icon' => getBaseUrl() . '/favicon/icon-192.png',
+            'badge' => getBaseUrl() . '/favicon/icon-192.png',
+            'data' => ['url' => $url]
         ]);
 
         // Queue all notifications
@@ -87,34 +98,15 @@ function sendPushNotifications($message, $senderId)
         // Send all queued notifications
         $sent = 0;
         $failed = 0;
-        $expiredEndpoints = [];
-
         foreach ($webPush->flush() as $report) {
             if ($report->isSuccess()) {
                 $sent++;
             } else {
                 $failed++;
-                $endpoint = $report->getEndpoint();
-                $statusCode = $report->getResponse() ? $report->getResponse()->getStatusCode() : null;
-
-                // Remove expired/invalid subscriptions
-                if (in_array($statusCode, [404, 410])) {
-                    $expiredEndpoints[] = $endpoint;
-                }
-
-                error_log("Push failed for {$endpoint}: {$report->getReason()} (HTTP {$statusCode})");
             }
         }
 
-        // Clean up expired subscriptions
-        if (!empty($expiredEndpoints)) {
-            $placeholders = implode(',', array_fill(0, count($expiredEndpoints), '?'));
-            $deleteStmt = $pdo->prepare("DELETE FROM push_subscriptions WHERE endpoint IN ({$placeholders})");
-            $deleteStmt->execute($expiredEndpoints);
-            error_log("Removed " . count($expiredEndpoints) . " expired push subscriptions");
-        }
-
-        return ['sent' => $sent, 'failed' => $failed, 'expired_removed' => count($expiredEndpoints)];
+        return ['sent' => $sent, 'failed' => $failed];
     } catch (Exception $e) {
         error_log("Push notification error: " . $e->getMessage());
         return ['error' => $e->getMessage()];

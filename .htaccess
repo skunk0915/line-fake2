@@ -26,6 +26,7 @@
   # Backend/API/Uploads pass-through
   RewriteRule ^backend/ - [L]
   RewriteRule ^api/ - [L]
+  RewriteRule ^uploads/(.*)$ backend/uploads/$1 [L]
 
   # Service worker and manifest - no rewrite
   RewriteRule ^sw\.js$ - [L]
