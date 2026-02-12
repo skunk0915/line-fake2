@@ -59,6 +59,10 @@ const Chat = ({ user, setUser }) => {
     const [groupEditAvatarFile, setGroupEditAvatarFile] = useState(null);
     const [groupEditAvatarPreview, setGroupEditAvatarPreview] = useState('');
     const [isUpdatingGroup, setIsUpdatingGroup] = useState(false);
+    const [editingGroupMembers, setEditingGroupMembers] = useState([]);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [deleteConfirmCode, setDeleteConfirmCode] = useState('');
+    const [userInputDeleteCode, setUserInputDeleteCode] = useState('');
 
     const socketRef = useRef();
     const messagesEndRef = useRef(null);
@@ -580,6 +584,7 @@ const Chat = ({ user, setUser }) => {
         const formData = new FormData();
         formData.append('group_id', editingGroup.id);
         formData.append('name', groupEditName);
+        formData.append('user_ids', JSON.stringify(editingGroupMembers));
         if (groupEditAvatarFile) formData.append('avatar', groupEditAvatarFile);
 
         try {
@@ -608,12 +613,62 @@ const Chat = ({ user, setUser }) => {
         reader.readAsDataURL(file);
     };
 
-    const onGroupLongPress = (g) => {
+    const generateDeleteCode = () => {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        let code = '';
+        for (let i = 0; i < 5; i++) {
+            code += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        setDeleteConfirmCode(code);
+        setUserInputDeleteCode('');
+        setShowDeleteConfirm(true);
+    };
+
+    const handleDeleteGroup = async () => {
+        if (userInputDeleteCode !== deleteConfirmCode) {
+            alert('削除コードが一致しません');
+            return;
+        }
+        if (!window.confirm('本当にこのグループを削除しますか？')) return;
+
+        try {
+            const res = await axios.delete(`${API_URL}/groups.php`, {
+                params: { id: editingGroup.id }
+            });
+            if (res.data.success) {
+                setIsGroupEditMode(false);
+                setEditingGroup(null);
+                fetchGroups();
+                if (recipientType === 'group' && String(recipientId) === String(editingGroup.id)) {
+                    setRecipientId(null);
+                    setRecipientType('user');
+                }
+                alert('グループを削除しました');
+            }
+        } catch (err) {
+            console.error('Delete group error:', err);
+            alert('グループの削除に失敗しました');
+        }
+    };
+
+    const onGroupLongPress = async (g) => {
         setEditingGroup(g);
         setGroupEditName(g.name);
         setGroupEditAvatarPreview(g.avatar_url || '');
         setGroupEditAvatarFile(null);
         setIsGroupEditMode(true);
+        setShowDeleteConfirm(false);
+
+        try {
+            const res = await axios.get(`${API_URL}/groups.php`, {
+                params: { group_id: g.id }
+            });
+            if (res.data && res.data.members) {
+                setEditingGroupMembers(res.data.members.map(m => m.id));
+            }
+        } catch (err) {
+            console.error('Fetch members error:', err);
+        }
     };
 
     const groupLongPressTimer = useRef(null);
@@ -921,7 +976,60 @@ const Chat = ({ user, setUser }) => {
                                 {groupEditAvatarPreview ? <img src={groupEditAvatarPreview} alt="" className="group-avatar-preview" /> : <div className="group-avatar-preview group-icon">👥</div>}
                                 <label className="avatar-input-label">変更<input type="file" accept="image/*" onChange={handleGroupAvatarChange} style={{ display: 'none' }} /></label>
                             </div>
-                            <input type="text" placeholder="グループ名" value={groupEditName} onChange={e => setGroupEditName(e.target.value)} required />
+                            <div className="input-group">
+                                <label>グループ名</label>
+                                <input type="text" placeholder="グループ名" value={groupEditName} onChange={e => setGroupEditName(e.target.value)} required />
+                            </div>
+
+                            <div className="member-selection">
+                                <label>メンバー編集</label>
+                                {users.filter(u => String(u.id) !== String(user.id)).map(u => (
+                                    <label key={u.id} className="member-item">
+                                        <input
+                                            type="checkbox"
+                                            checked={editingGroupMembers.includes(u.id)}
+                                            onChange={e => {
+                                                if (e.target.checked) {
+                                                    setEditingGroupMembers([...editingGroupMembers, u.id]);
+                                                } else {
+                                                    setEditingGroupMembers(editingGroupMembers.filter(id => id !== u.id));
+                                                }
+                                            }}
+                                        />
+                                        <img src={u.avatar_url} alt="" className="avatar-small" />
+                                        <span>{u.name}</span>
+                                    </label>
+                                ))}
+                                <label className="member-item disabled">
+                                    <input type="checkbox" checked disabled />
+                                    <img src={user.avatar_url} alt="" className="avatar-small" />
+                                    <span>{user.name} (あなた)</span>
+                                </label>
+                            </div>
+
+                            <div className="danger-zone">
+                                {!showDeleteConfirm ? (
+                                    <button type="button" className="delete-btn" onClick={generateDeleteCode}>このグループを削除</button>
+                                ) : (
+                                    <div className="delete-confirm-box">
+                                        <p className="delete-warning">確認のため下の文字列を入力してください：</p>
+                                        <div className="confirm-code-display">{deleteConfirmCode}</div>
+                                        <input
+                                            type="text"
+                                            className="delete-code-input"
+                                            value={userInputDeleteCode}
+                                            onChange={e => setUserInputDeleteCode(e.target.value.toUpperCase())}
+                                            placeholder="5文字入力"
+                                            maxLength={5}
+                                        />
+                                        <div className="delete-confirm-actions">
+                                            <button type="button" className="cancel-delete-btn" onClick={() => setShowDeleteConfirm(false)}>キャンセル</button>
+                                            <button type="button" className="final-delete-btn" onClick={handleDeleteGroup} disabled={userInputDeleteCode !== deleteConfirmCode}>削除を実行</button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
                             <div className="modal-actions">
                                 <button type="button" onClick={() => setIsGroupEditMode(false)}>キャンセル</button>
                                 <button type="submit" className="primary" disabled={isUpdatingGroup}>{isUpdatingGroup ? '更新中...' : '保存'}</button>
