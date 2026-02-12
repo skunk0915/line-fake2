@@ -219,7 +219,12 @@
 }
 
 .user-name-label {
-    font-size: clamp(6px, 3vw, 10px);
+    font-size: 11px;
+    margin-top: 4px;
+    color: #333;
+    max-width: 60px;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .user-avatar {
@@ -323,39 +328,63 @@
 /* Message attachments */
 .message-image {
     max-width: 100%;
-    max-height: 300px;
-    border-radius: 10px;
+    max-height: 250px;
+    border-radius: 12px;
     cursor: pointer;
+    display: block;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s;
+}
+
+.message-image:hover {
+    transform: scale(1.02);
 }
 
 .message-video {
     max-width: 100%;
-    max-height: 300px;
-    border-radius: 10px;
+    max-height: 250px;
+    border-radius: 12px;
+    display: block;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .message-audio {
-    width: 200px;
+    width: 240px;
     height: 40px;
+    display: block;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.05));
 }
 
 .file-attachment {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px;
-    background: rgba(0, 0, 0, 0.05);
-    border-radius: 8px;
+    gap: 12px;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.04);
+    border-radius: 12px;
     cursor: pointer;
+    min-width: 180px;
+    transition: background 0.2s;
+}
+
+.file-attachment:hover {
+    background: rgba(0, 0, 0, 0.08);
 }
 
 .file-icon {
-    font-size: 1.5rem;
+    font-size: 1.8rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .file-name {
-    font-size: 0.85rem;
+    font-size: 0.9rem;
     color: #333;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* Input Area */
@@ -364,82 +393,121 @@
     bottom: 0;
     left: 0;
     right: 0;
-    padding: 15px;
-    background: rgba(255, 255, 255, 0.15);
-    backdrop-filter: blur(2px) saturate(150%);
-    -webkit-backdrop-filter: blur(2px) saturate(150%);
+    padding: 10px 15px;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px) saturate(180%);
+    -webkit-backdrop-filter: blur(10px) saturate(180%);
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     border-top: 1px solid rgba(255, 255, 255, 0.2);
     z-index: 100;
 }
 
-.attachment-toggle {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    border: 1px solid #fff;
-    color: #fff;
+.input-actions-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.plus-btn-label {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.plus-btn-label:active {
+    transform: scale(0.9);
+}
+
+.plus-icon {
+    font-size: 24px;
+    color: #06c755;
+    font-weight: bold;
+}
+
+.mic-btn {
+    width: 32px;
+    height: 32px;
+    border: none;
     background: none;
-    font-size: 1.5rem;
+    font-size: 20px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 0;
-    box-sizing: border-box;
-    line-height: 1;
+    transition: transform 0.2s;
 }
 
-.attachment-menu {
-    position: absolute;
-    bottom: 70px;
-    left: 15px;
-    background: white;
-    border-radius: 12px;
-    box-shadow: 0 -5px 15px rgba(0, 0, 0, 0.1);
-    display: flex;
-    flex-direction: column;
-    width: 150px;
-    padding: 5px;
-    z-index: 110;
+.mic-btn:active {
+    transform: scale(0.9);
 }
 
-.menu-item {
-    padding: 12px 15px;
-    border: none;
-    background: none;
-    text-align: left;
-    cursor: pointer;
-    font-size: 0.9rem;
-    border-radius: 8px;
+.mic-btn.recording {
+    color: #ff4d4f;
+    animation: pulse 1.5s infinite;
 }
 
-.menu-item:hover {
-    background: #f5f5f5;
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+
+    50% {
+        transform: scale(1.1);
+        opacity: 0.7;
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
 }
 
 /* File Preview Bar */
 .file-preview-bar {
     position: absolute;
-    bottom: 70px;
-    left: 0;
-    right: 0;
-    background: #fafafa;
-    padding: 10px 15px;
+    bottom: 100%;
+    left: 15px;
+    right: 15px;
+    background: white;
+    padding: 8px 12px;
     display: flex;
     align-items: center;
     gap: 10px;
-    border-top: 1px solid #eee;
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -5px 15px rgba(0, 0, 0, 0.05);
     z-index: 105;
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(10px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
 }
 
 .file-preview-bar img {
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
     object-fit: cover;
-    border-radius: 4px;
+    border-radius: 6px;
+}
+
+.preview-icon {
+    font-size: 20px;
 }
 
 .preview-name {
@@ -448,6 +516,16 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    color: #333;
+}
+
+.close-preview {
+    background: none;
+    border: none;
+    color: #999;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 4px;
 }
 
 /* Modals */

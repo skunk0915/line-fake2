@@ -36,7 +36,6 @@ const Chat = ({ user }) => {
     const [newGroupName, setNewGroupName] = useState('');
 
     // UI States
-    const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
     const [showHamburgerMenu, setShowHamburgerMenu] = useState(false);
     const [currentTheme, setCurrentTheme] = useState(() => {
         return localStorage.getItem('chat_theme') || 'default';
@@ -292,7 +291,6 @@ const Chat = ({ user }) => {
         const file = e.target.files[0];
         if (!file) return;
         setSelectedFile(file);
-        setShowAttachmentMenu(false);
 
         if (file.type.startsWith('image/')) {
             const reader = new FileReader();
@@ -328,7 +326,6 @@ const Chat = ({ user }) => {
 
             recorder.start();
             setIsRecording(true);
-            setShowAttachmentMenu(false);
         } catch (err) {
             console.error('Mic error:', err);
             alert('マイクの使用が許可されていません');
@@ -610,27 +607,23 @@ const Chat = ({ user }) => {
             </div>
 
             <form className="input-area" onSubmit={handleSend}>
-                <button type="button" className="attachment-toggle" onClick={() => setShowAttachmentMenu(!showAttachmentMenu)}>+</button>
-
-                {showAttachmentMenu && (
-                    <div className="attachment-menu">
-                        <label className="menu-item">
-                            📷 画像
-                            <input type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
-                        </label>
-                        <label className="menu-item">
-                            🎥 動画
-                            <input type="file" accept="video/*" onChange={handleFileChange} style={{ display: 'none' }} />
-                        </label>
-                        <button type="button" className="menu-item" onClick={isRecording ? stopRecording : startRecording}>
-                            {isRecording ? '🛑 停止' : '🎤 音声'}
-                        </button>
-                        <label className="menu-item">
-                            📁 ファイル
-                            <input type="file" onChange={handleFileChange} style={{ display: 'none' }} />
-                        </label>
-                    </div>
-                )}
+                <div className="input-actions-left">
+                    <label className="plus-btn-label">
+                        <span className="plus-icon">+</span>
+                        <input
+                            type="file"
+                            onChange={handleFileChange}
+                            style={{ display: 'none' }}
+                        />
+                    </label>
+                    <button
+                        type="button"
+                        className={`mic-btn ${isRecording ? 'recording' : ''}`}
+                        onClick={isRecording ? stopRecording : startRecording}
+                    >
+                        {isRecording ? '🛑' : '🎤'}
+                    </button>
+                </div>
 
                 {filePreview && (
                     <div className="file-preview-bar">
@@ -639,7 +632,7 @@ const Chat = ({ user }) => {
                         {filePreview.type === 'audio' && <div className="preview-icon">🎤</div>}
                         {filePreview.type === 'file' && <div className="preview-icon">📄</div>}
                         <span className="preview-name">{filePreview.name || '添付ファイル'}</span>
-                        <button type="button" onClick={() => { setSelectedFile(null); setFilePreview(null); }}>✕</button>
+                        <button type="button" className="close-preview" onClick={() => { setSelectedFile(null); setFilePreview(null); }}>✕</button>
                     </div>
                 )}
 
@@ -650,7 +643,7 @@ const Chat = ({ user }) => {
                     placeholder={isRecording ? "録音中..." : "メッセージを入力..."}
                     readOnly={isRecording}
                 />
-                <button type="submit" disabled={(!input.trim() && !selectedFile) || isRecording}>送信</button>
+                <button type="submit" className="send-btn" disabled={(!input.trim() && !selectedFile) || isRecording}>送信</button>
             </form>
 
             {modalFile && (
