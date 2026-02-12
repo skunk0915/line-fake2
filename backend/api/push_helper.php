@@ -106,6 +106,23 @@ function sendPushNotifications($message, $senderId)
             }
         }
 
+        // Notify Socket.io server if running locally
+        try {
+            $ch = curl_init('http://localhost:3000/broadcast');
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
+                'message' => $message,
+                'subscriptions' => $subscriptions
+            ]));
+            curl_setopt($ch, CURLOPT_TIMEOUT, 1); // Small timeout
+            curl_exec($ch);
+            curl_close($ch);
+        } catch (Exception $e) {
+            // Ignore socket server errors
+        }
+
         return ['sent' => $sent, 'failed' => $failed];
     } catch (Exception $e) {
         error_log("Push notification error: " . $e->getMessage());

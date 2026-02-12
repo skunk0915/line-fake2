@@ -10,10 +10,6 @@ if ($method === 'GET') {
     $recipientId = $_GET['recipient_id'] ?? 0;
     $recipientType = $_GET['recipient_type'] ?? 'user';
 
-    if ($recipientId == 0) {
-        $recipientId = 1;
-    }
-
 
     $pdo = getDbConnection();
 
@@ -76,7 +72,7 @@ if ($method === 'POST') {
     $content = $_POST['content'] ?? null;
     $type = $_POST['type'] ?? 'text'; // From frontend: text, image, video, audio, file
 
-    if ($recipientId == 0) {
+    if ($recipientType === 'global' || (int)$recipientId === 0) {
         $recipientType = 'global';
     }
 
@@ -116,7 +112,8 @@ if ($method === 'POST') {
                     'mp4' => 'video/mp4',
                     'mov' => 'video/quicktime',
                     'mp3' => 'audio/mpeg',
-                    'wav' => 'audio/wav'
+                    'wav' => 'audio/wav',
+                    'pdf' => 'application/pdf'
                 ];
                 $mime = $mimes[$ext] ?? 'application/octet-stream';
             }
@@ -124,9 +121,16 @@ if ($method === 'POST') {
             if (strpos($mime, 'image/') === 0) $type = 'image';
             else if (strpos($mime, 'video/') === 0) $type = 'video';
             else if (strpos($mime, 'audio/') === 0) $type = 'audio';
-            else if ($type === 'text') $type = 'file';
+            else $type = 'file';
+
+            if (!$content) {
+                if ($type === 'image') $content = '[画像]';
+                else if ($type === 'video') $content = '[動画]';
+                else if ($type === 'audio') $content = '[音声]';
+                else $content = '[ファイル]';
+            }
         } else {
-            jsonResponse(['error' => 'Failed to upload file'], 500);
+            jsonResponse(['error' => 'Failed to upload file. Error code: ' . $_FILES['file']['error']], 500);
         }
     } else if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
         // Backward compatibility for image field
@@ -161,6 +165,11 @@ if ($method === 'POST') {
     }
     $newMessage['file_url'] = $url;
     $newMessage['image_url'] = ($newMessage['type'] === 'image') ? $url : null;
+
+    // Ensure file_name is not null for frontend
+    if (!$newMessage['file_name'] && $newMessage['file_url']) {
+        $newMessage['file_name'] = basename($newMessage['file_url']);
+    }
 
     // Push Notifications
     try {

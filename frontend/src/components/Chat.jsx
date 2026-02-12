@@ -27,7 +27,7 @@ const Chat = ({ user }) => {
     const [showPushPrompt, setShowPushPrompt] = useState(false);
 
     // Chat Selection
-    const [recipientId, setRecipientId] = useState(0);
+    const [recipientId, setRecipientId] = useState(null);
     const [recipientType, setRecipientType] = useState('user'); // 'user', 'group'
 
     // Group Creation State
@@ -60,6 +60,14 @@ const Chat = ({ user }) => {
             const res = await axios.get(`${API_URL}/users.php`);
             if (res.data && res.data.users) {
                 setUsers(res.data.users);
+                // If no recipient selected yet, select the first other user
+                if (!recipientId && res.data.users.length > 0) {
+                    const firstOther = res.data.users.find(u => String(u.id) !== String(user.id));
+                    if (firstOther) {
+                        setRecipientId(firstOther.id);
+                        setRecipientType('user');
+                    }
+                }
             }
         } catch (err) {
             console.error('Fetch users error:', err);
@@ -112,8 +120,11 @@ const Chat = ({ user }) => {
         }
 
         socketRef.current = io(SOCKET_URL, {
-            transports: ['websocket', 'polling'],
+            transports: ['polling', 'websocket'], // Prefer polling as fallback on shared hosting
             reconnection: true,
+            path: '/socket.io', // Ensure path matches server expectation
+            secure: true,
+            rejectUnauthorized: false // Sometimes needed for specific SSL setups on shared hosting
         });
 
         socketRef.current.on('connect', () => {
@@ -200,10 +211,19 @@ const Chat = ({ user }) => {
                 if (navigator.clearAppBadge) navigator.clearAppBadge().catch(() => { });
             }
         };
+
+        // Polling fallback (every 5 seconds)
+        const pollInterval = setInterval(() => {
+            // Even if socket is connected, poll occasionally as safety, 
+            // but definitely poll if socket is disconnected
+            fetchMessages();
+        }, 5000);
+
         document.addEventListener('visibilitychange', handleVisibilityChange);
 
         return () => {
             document.removeEventListener('visibilitychange', handleVisibilityChange);
+            clearInterval(pollInterval);
             socketRef.current?.disconnect();
         };
     }, [user, connectSocket, fetchMessages, fetchUsers, fetchGroups]);
@@ -244,12 +264,18 @@ const Chat = ({ user }) => {
         if (input) formData.append('content', input);
         if (selectedFile) {
             formData.append('file', selectedFile);
-            formData.append('type', selectedFile.type.split('/')[0] || 'file');
+            let fileType = 'file';
+            if (selectedFile.type.startsWith('image/')) fileType = 'image';
+            else if (selectedFile.type.startsWith('video/')) fileType = 'video';
+            else if (selectedFile.type.startsWith('audio/')) fileType = 'audio';
+            formData.append('type', fileType);
         }
 
         try {
+            console.log('Sending message...', { recipientId, recipientType, contentType: selectedFile?.type });
             const res = await axios.post(`${API_URL}/messages.php`, formData);
             if (res.data.success) {
+                console.log('Send success');
                 setInput('');
                 setSelectedFile(null);
                 setFilePreview(null);
@@ -257,7 +283,8 @@ const Chat = ({ user }) => {
                 fetchMessages();
             }
         } catch (err) {
-            console.error('Send error:', err);
+            console.error('Send error details:', err.response?.data || err.message);
+            alert('送信に失敗しました: ' + (err.response?.data?.error || err.message));
         }
     };
 
