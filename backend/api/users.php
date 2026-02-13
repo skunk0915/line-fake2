@@ -60,6 +60,18 @@ if ($method === 'POST') {
 
     try {
         if ($name && $avatarUrl) {
+            $stmt = $pdo->prepare("UPDATE users SET name = ?, avatar_url = ?, email = ? WHERE id = ?");
+            $stmt->execute([$name, $avatarUrl, $email, $userId]);
+        } elseif ($name && $email) {
+            $stmt = $pdo->prepare("UPDATE users SET name = ?, email = ? WHERE id = ?");
+            $stmt->execute([$name, $email, $userId]);
+        } elseif ($avatarUrl && $email) {
+            $stmt = $pdo->prepare("UPDATE users SET avatar_url = ?, email = ? WHERE id = ?");
+            $stmt->execute([$avatarUrl, $email, $userId]);
+        } elseif ($email) {
+            $stmt = $pdo->prepare("UPDATE users SET email = ? WHERE id = ?");
+            $stmt->execute([$email, $userId]);
+        } elseif ($name && $avatarUrl) {
             $stmt = $pdo->prepare("UPDATE users SET name = ?, avatar_url = ? WHERE id = ?");
             $stmt->execute([$name, $avatarUrl, $userId]);
         } elseif ($name) {

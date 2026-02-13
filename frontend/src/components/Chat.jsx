@@ -48,6 +48,7 @@ const Chat = ({ user, setUser }) => {
 
     // Profile Edit State
     const [profileName, setProfileName] = useState(user.name);
+    const [profileEmail, setProfileEmail] = useState(user.email || '');
     const [profileAvatarFile, setProfileAvatarFile] = useState(null);
     const [profileAvatarPreview, setProfileAvatarPreview] = useState(user.avatar_url);
     const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
@@ -546,9 +547,16 @@ const Chat = ({ user, setUser }) => {
     const handleProfileUpdate = async (e) => {
         e.preventDefault();
         setIsUpdatingProfile(true);
+        if (profileEmail && !profileEmail.endsWith('@gmail.com')) {
+            alert('メールアドレスは @gmail.com のみ登録可能です');
+            setIsUpdatingProfile(false);
+            return;
+        }
+
         const formData = new FormData();
         formData.append('user_id', user.id);
         formData.append('name', profileName);
+        if (profileEmail) formData.append('email', profileEmail);
         if (profileAvatarFile) formData.append('avatar', profileAvatarFile);
 
         try {
@@ -798,6 +806,9 @@ const Chat = ({ user, setUser }) => {
                                     </div>
                                     <div className="name-input-group">
                                         <input type="text" value={profileName} onChange={e => setProfileName(e.target.value)} placeholder="お名前" required />
+                                    </div>
+                                    <div className="name-input-group" style={{ marginTop: '10px' }}>
+                                        <input type="email" value={profileEmail} onChange={e => setProfileEmail(e.target.value)} placeholder="メールアドレス（通知用）" />
                                     </div>
                                     <button type="submit" className="profile-save-btn" disabled={isUpdatingProfile}>
                                         {isUpdatingProfile ? '更新中...' : '保存'}
