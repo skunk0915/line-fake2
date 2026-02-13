@@ -729,6 +729,28 @@ const Chat = ({ user, setUser }) => {
         }
     };
 
+    // URL Linkifier
+    const renderMessageContent = (content) => {
+        const urlRegex = /(https?:\/\/[^\s]+)/g;
+        return content.split(urlRegex).map((part, index) => {
+            if (part.match(urlRegex)) {
+                return (
+                    <a
+                        key={index}
+                        href={part}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: '#007bff', textDecoration: 'underline', wordBreak: 'break-all' }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {part}
+                    </a>
+                );
+            }
+            return part;
+        });
+    };
+
     return (
         <div className={`chat-container ${showHamburgerMenu ? 'menu-active' : ''}`} style={{ background: activeTheme.background }}>
             <div className="selector-wrapper">
@@ -901,7 +923,7 @@ const Chat = ({ user, setUser }) => {
                                                         <span className="file-name">{msg.file_name || 'ファイル'}</span>
                                                     </div>
                                                 )}
-                                                {msg.content && <p className="message-text">{msg.content}</p>}
+                                                {msg.content && <p className="message-text">{renderMessageContent(msg.content)}</p>}
                                             </div>
                                             {!isMe && <span className="timestamp">{new Date(msg.created_at).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}</span>}
                                         </div>

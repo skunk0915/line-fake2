@@ -23,6 +23,12 @@
 
 <body>
   <div id="root"></div>
+  <script>
+    // Disable pinch zoom on iOS
+    document.addEventListener('gesturestart', function (e) {
+      e.preventDefault();
+    });
+  </script>
   <script type="module" src="/src/main.jsx"></script>
 </body>
 
