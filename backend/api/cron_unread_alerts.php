@@ -97,6 +97,7 @@ try {
 	}
 
 	$sentCount = 0;
+	$debugDetails = [];
 
 	// Process each user
 	foreach ($alertsByUser as $uid => $userData) {
@@ -105,9 +106,13 @@ try {
 		$msgs = $userData['messages'];
 
 		if (empty($email)) {
-			// Cannot send email, but maybe we should mark as alerted to avoid infinite loop?
-			// Or just skip. If we mark as alerted, they never get email even if they add it later.
-			// Let's skip.
+			// Skip and log reason
+			$debugDetails[$uid] = "Skipped (No Email) - Name: {$name}";
+			continue;
+		}
+
+		if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+			$debugDetails[$uid] = "Skipped (Invalid Email Format: {$email})";
 			continue;
 		}
 
@@ -116,7 +121,7 @@ try {
 		mb_internal_encoding("UTF-8");
 
 		// Construct Email
-		$subject = "【Line風】未読メッセージのお知らせ";
+		$subject = "【LineFake】未読メッセージのお知らせ";
 		$body = "{$name} さん\n\n";
 		$body .= "10分以上未読のメッセージがあります。\n\n";
 
@@ -140,13 +145,23 @@ try {
 		$body .= "\n確認はこちら: " . getBaseUrl() . "\n";
 
 		// Proper Headers for Sakura / Gmail
-		$fromEmail = "no-reply@" . $_SERVER['HTTP_HOST'];
+		// Use a fixed address bound to the server domain to pass SPF/DKIM
+		$serverDomain = $_SERVER['HTTP_HOST'];
+		$fromEmail = "noreply@" . $serverDomain;
+
+		// If on Sakura, usually the username@server matches better, but stick to domain for now
+		// Important: Envelope From (-f) must match From header
+
 		$headers = "From: " . mb_encode_mimeheader("LineFake 通知") . " <{$fromEmail}>\r\n";
 		$headers .= "Reply-To: {$fromEmail}\r\n";
+		$headers .= "Return-Path: {$fromEmail}\r\n"; // Hint for some MTAs
 		$headers .= "X-Mailer: PHP/" . phpversion();
+		$headers .= "MIME-Version: 1.0\r\n";
+		$headers .= "Content-Type: text/plain; charset=UTF-8\r\n";
 
 		// Try to send email with -f option for better delivery
-		$mailSent = mb_send_mail($email, $subject, $body, $headers, "-f " . $fromEmail);
+		// This sets the Envelope From (Return-Path)
+		$mailSent = mb_send_mail($email, $subject, $body, $headers, "-f" . $fromEmail);
 
 		if ($mailSent) {
 			// Mark all included messages as alerted for this user
@@ -165,13 +180,18 @@ try {
 				$insertStmt->execute($params);
 			}
 			$sentCount++;
+			$debugDetails[$uid] = "Sent OK to {$email}";
+		} else {
+			$lastErr = error_get_last();
+			$debugDetails[$uid] = "Failed to send to {$email}. PHP Error: " . ($lastErr['message'] ?? 'Unknown');
 		}
 	}
 
 	if (php_sapi_name() === 'cli') {
 		echo "Valid alerts sent to {$sentCount} users.\n";
+		print_r($debugDetails);
 	} else {
-		jsonResponse(['success' => true, 'sent_count' => $sentCount]);
+		jsonResponse(['success' => true, 'sent_count' => $sentCount, 'details' => $debugDetails]);
 	}
 } catch (Exception $e) {
 	if (php_sapi_name() === 'cli') {
