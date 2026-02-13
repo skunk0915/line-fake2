@@ -65,6 +65,10 @@ const Chat = ({ user, setUser }) => {
     const [deleteConfirmCode, setDeleteConfirmCode] = useState('');
     const [userInputDeleteCode, setUserInputDeleteCode] = useState('');
 
+    // User Detail Modal State
+    const [modalUser, setModalUser] = useState(null);
+    const [isUserModalEnlargedIcon, setIsUserModalEnlargedIcon] = useState(false);
+
     const socketRef = useRef();
     const messagesEndRef = useRef(null);
     const messagesListRef = useRef(null);
@@ -762,9 +766,14 @@ const Chat = ({ user, setUser }) => {
                             onClick={() => {
                                 if (String(recipientId) !== String(g.id) || recipientType !== 'group') {
                                     setMessages([]);
+                                    setIsLoadingMessages(true);
+                                    isFetchingRef.current = false;
                                     setRecipientId(g.id);
                                     setRecipientType('group');
                                     setManualScroll(false);
+                                } else {
+                                    // Already active - Trigger edit mode
+                                    onGroupLongPress(g);
                                 }
                             }}
                             onMouseDown={() => onGroupTouchStart(g)}
@@ -791,9 +800,14 @@ const Chat = ({ user, setUser }) => {
                             onClick={() => {
                                 if (String(recipientId) !== String(u.id) || recipientType !== 'user') {
                                     setMessages([]);
+                                    setIsLoadingMessages(true);
+                                    isFetchingRef.current = false;
                                     setRecipientId(u.id);
                                     setRecipientType('user');
                                     setManualScroll(false);
+                                } else {
+                                    // Already active - Show user detail modal
+                                    setModalUser(u);
                                 }
                             }}
                         >
@@ -961,8 +975,8 @@ const Chat = ({ user, setUser }) => {
             </div>
 
             {isGroupCreateMode && (
-                <div className="group-modal">
-                    <div className="group-modal-content">
+                <div className="group-modal" onClick={() => setIsGroupCreateMode(false)}>
+                    <div className="group-modal-content" onClick={e => e.stopPropagation()}>
                         <div className="modal-tabs">
                             <button className={modalMode === 'group' ? 'active' : ''} onClick={() => setModalMode('group')}>グループ作成</button>
                             <button className={modalMode === 'contact' ? 'active' : ''} onClick={() => setModalMode('contact')}>友だち登録</button>
@@ -1001,12 +1015,12 @@ const Chat = ({ user, setUser }) => {
             )}
 
             {isGroupEditMode && editingGroup && (
-                <div className="group-modal">
-                    <div className="group-modal-content">
+                <div className="group-modal" onClick={() => setIsGroupEditMode(false)}>
+                    <div className="group-modal-content" onClick={e => e.stopPropagation()}>
                         <h4>グループ編集</h4>
                         <form onSubmit={handleGroupUpdate}>
                             <div className="group-icon-edit">
-                                {groupEditAvatarPreview ? <img src={groupEditAvatarPreview} alt="" className="group-avatar-preview" /> : <div className="group-avatar-preview group-icon">👥</div>}
+                                {groupEditAvatarPreview ? <img src={groupEditAvatarPreview} alt="" className="group-avatar-preview" onClick={() => setModalFile({ file_url: groupEditAvatarPreview, file_name: 'group_icon' })} /> : <div className="group-avatar-preview group-icon">👥</div>}
                                 <label className="avatar-input-label">変更<input type="file" accept="image/*" onChange={handleGroupAvatarChange} style={{ display: 'none' }} /></label>
                             </div>
                             <div className="input-group">
@@ -1080,6 +1094,27 @@ const Chat = ({ user, setUser }) => {
                         <div className="modal-actions-bar">
                             <button className="save-btn" onClick={() => handleFileDownload(modalFile.file_url, modalFile.file_name || 'image.jpg')}>💾 保存 / 共有</button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {modalUser && (
+                <div className="user-detail-modal" onClick={() => { setModalUser(null); setIsUserModalEnlargedIcon(false); }}>
+                    <div className="user-detail-content" onClick={e => e.stopPropagation()}>
+                        <div className="user-detail-avatar-container" onClick={() => { if (modalUser.avatar_url) setIsUserModalEnlargedIcon(true); }}>
+                            <img src={modalUser.avatar_url} alt="" className="user-detail-avatar" />
+                        </div>
+                        <div className="user-detail-name">{modalUser.name}</div>
+                        <button className="close-user-detail" onClick={() => { setModalUser(null); setIsUserModalEnlargedIcon(false); }}>閉じる</button>
+                    </div>
+                </div>
+            )}
+
+            {isUserModalEnlargedIcon && modalUser && modalUser.avatar_url && (
+                <div className="image-modal" onClick={() => setIsUserModalEnlargedIcon(false)}>
+                    <span className="close-modal" onClick={() => setIsUserModalEnlargedIcon(false)}>✕</span>
+                    <div className="modal-content" onClick={e => e.stopPropagation()}>
+                        <img src={modalUser.avatar_url} alt="full preview" />
                     </div>
                 </div>
             )}

@@ -843,6 +843,7 @@
     border-radius: 50%;
     object-fit: cover;
     border: 2px solid #eee;
+    cursor: pointer;
 }
 
 .modal-actions {
@@ -1184,4 +1185,93 @@
 .member-item.disabled {
     opacity: 0.6;
     cursor: default;
+}
+
+/* User Detail Modal (New) */
+.user-detail-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+    backdrop-filter: blur(5px);
+}
+
+.user-detail-content {
+    background: white;
+    padding: 30px;
+    border-radius: 20px;
+    width: 280px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.user-detail-avatar-container {
+    margin-bottom: 20px;
+    cursor: pointer;
+    position: relative;
+}
+
+.user-detail-avatar {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    object-fit: cover;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    transition: transform 0.2s;
+    border: 4px solid white;
+}
+
+.user-detail-avatar:hover {
+    transform: scale(1.05);
+}
+
+.user-detail-name {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 25px;
+    word-break: break-all;
+}
+
+.close-user-detail {
+    padding: 10px 30px;
+    border-radius: 30px;
+    border: none;
+    background: #f0f0f0;
+    color: #333;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background 0.2s;
+    font-weight: bold;
+}
+
+.close-user-detail:hover {
+    background: #e0e0e0;
+}
+
+@keyframes popIn {
+    0% {
+        transform: scale(0.8);
+        opacity: 0;
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* Ensure existing image-modal has higher z-index if needed */
+.image-modal {
+    z-index: 3000 !important;
 }
