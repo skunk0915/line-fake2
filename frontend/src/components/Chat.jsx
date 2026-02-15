@@ -28,8 +28,17 @@ const Chat = ({ user, setUser }) => {
     const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
     // Chat Selection
-    const [recipientId, setRecipientId] = useState(null);
-    const [recipientType, setRecipientType] = useState('user'); // 'user', 'group'
+    const [recipientId, setRecipientId] = useState(() => {
+        const params = new URLSearchParams(window.location.search);
+        const chatWith = params.get('chat_with');
+        return chatWith !== null ? parseInt(chatWith) : null;
+    });
+    const [recipientType, setRecipientType] = useState(() => {
+        const params = new URLSearchParams(window.location.search);
+        const chatWith = params.get('chat_with');
+        const type = params.get('type') || 'user';
+        return chatWith === '0' ? 'global' : type;
+    }); // 'user', 'group'
 
     // Group/Contact Creation State
     const [isGroupCreateMode, setIsGroupCreateMode] = useState(false);
@@ -88,7 +97,7 @@ const Chat = ({ user, setUser }) => {
             if (res.data && res.data.users) {
                 setUsers(res.data.users);
                 // If no recipient selected yet, select the first other user
-                if (!recipientId && res.data.users.length > 0) {
+                if (recipientId === null && res.data.users.length > 0) {
                     const firstOther = res.data.users.find(u => String(u.id) !== String(user.id));
                     if (firstOther) {
                         setRecipientId(firstOther.id);
@@ -116,10 +125,10 @@ const Chat = ({ user, setUser }) => {
     }, [user.id]);
 
     // Fetch messages from server
-    const fetchMessages = useCallback(async () => {
+    const fetchMessages = useCallback(async (isSilent = false) => {
         if (isFetchingRef.current || !user?.id) return;
         isFetchingRef.current = true;
-        setIsLoadingMessages(true);
+        if (!isSilent) setIsLoadingMessages(true);
         try {
             const res = await axios.get(`${API_URL}/messages.php`, {
                 params: {
@@ -190,7 +199,7 @@ const Chat = ({ user, setUser }) => {
         });
 
         socketRef.current.on('connect', () => {
-            fetchMessages();
+            fetchMessages(true);
         });
 
         socketRef.current.on('chat_message', (msg) => {
@@ -253,9 +262,13 @@ const Chat = ({ user, setUser }) => {
             const chatWith = params.get('chat_with');
             const type = params.get('type') || 'user';
             if (chatWith !== null) {
+                // Clear state immediately to show meaningful loading
+                setMessages([]);
+                setIsLoadingMessages(true);
                 setRecipientId(parseInt(chatWith));
                 setRecipientType(chatWith === '0' ? 'global' : type);
                 setManualScroll(false);
+                setShowHamburgerMenu(false); // Close menu if open
             }
         };
 
@@ -323,7 +336,7 @@ const Chat = ({ user, setUser }) => {
 
         const handleVisibilityChange = () => {
             if (document.visibilityState === 'visible') {
-                fetchMessages();
+                fetchMessages(true);
                 fetchUsers();
                 fetchGroups();
                 if (navigator.clearAppBadge) navigator.clearAppBadge().catch(() => { });
@@ -331,7 +344,7 @@ const Chat = ({ user, setUser }) => {
         };
 
         const pollInterval = setInterval(() => {
-            fetchMessages();
+            fetchMessages(true);
             fetchUsers();
             fetchGroups();
         }, 5000);
@@ -903,10 +916,10 @@ const Chat = ({ user, setUser }) => {
                         </div>
                     )}
 
-                    {isLoadingMessages && messages.length === 0 && (
-                        <div className="loading-container">
+                    {isLoadingMessages && (
+                        <div className="loading-overlay-chat">
                             <div className="loading-spinner-premium"></div>
-                            <p>読み込み中...</p>
+                            <p>トークを読み込み中...</p>
                         </div>
                     )}
 
