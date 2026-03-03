@@ -22,15 +22,22 @@ if ($method === 'POST') {
 		$stmt = $pdo->prepare("INSERT INTO invitations (sender_id, email, token) VALUES (?, ?, ?)");
 		$stmt->execute([$senderId, $email, $token]);
 
-		// Send Email (Mocked or using mail())
+		// Email Content
 		$subject = "Line Fake - トークへの招待";
 		$approveUrl = (isset($_SERVER['HTTPS']) ? "https://" : "http://") . $_SERVER['HTTP_HOST'] . dirname($_SERVER['PHP_SELF']) . "/invitations.php?token=" . $token;
-
 		$message = "招待が届きました。\n\n以下のリンクをクリックして承認してください：\n" . $approveUrl;
-		$headers = "From: no-reply@" . $_SERVER['HTTP_HOST'];
+
+		// Proper Headers for Japanese/UTF-8 Email
+		mb_language("uni");
+		mb_internal_encoding("UTF-8");
+
+		$headers = "From: " . mb_encode_mimeheader("Line Fake", "UTF-8") . " <no-reply@" . $_SERVER['HTTP_HOST'] . ">\r\n";
+		$headers .= "MIME-Version: 1.0\r\n";
+		$headers .= "Content-Type: text/plain; charset=UTF-8\r\n";
+		$headers .= "Content-Transfer-Encoding: 8bit\r\n";
 
 		// Try to send email
-		$mailSent = @mail($email, $subject, $message, $headers);
+		$mailSent = mb_send_mail($email, $subject, $message, $headers);
 
 		jsonResponse([
 			'success' => true,

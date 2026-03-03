@@ -116,8 +116,8 @@ try {
 			continue;
 		}
 
-		// Prepare for Japanese Email
-		mb_language("Japanese");
+		// Prepare for Japanese Email (Forcing UTF-8)
+		mb_language("uni");
 		mb_internal_encoding("UTF-8");
 
 		// Construct Email
@@ -146,18 +146,19 @@ try {
 
 		// Proper Headers for Sakura / Gmail
 		// Use a fixed address bound to the server domain to pass SPF/DKIM
-		$serverDomain = $_SERVER['HTTP_HOST'];
+		$serverDomain = $_SERVER['HTTP_HOST'] ?? 'mizy.sakura.ne.jp';
 		$fromEmail = "noreply@" . $serverDomain;
 
 		// If on Sakura, usually the username@server matches better, but stick to domain for now
 		// Important: Envelope From (-f) must match From header
 
-		$headers = "From: " . mb_encode_mimeheader("LineFake 通知") . " <{$fromEmail}>\r\n";
+		$headers = "From: " . mb_encode_mimeheader("LineFake 通知", "UTF-8") . " <{$fromEmail}>\r\n";
 		$headers .= "Reply-To: {$fromEmail}\r\n";
 		$headers .= "Return-Path: {$fromEmail}\r\n"; // Hint for some MTAs
 		$headers .= "X-Mailer: PHP/" . phpversion();
 		$headers .= "MIME-Version: 1.0\r\n";
 		$headers .= "Content-Type: text/plain; charset=UTF-8\r\n";
+		$headers .= "Content-Transfer-Encoding: 8bit\r\n";
 
 		// Try to send email with -f option for better delivery
 		// This sets the Envelope From (Return-Path)
